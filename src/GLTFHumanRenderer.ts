@@ -45,16 +45,18 @@ export class GLTFHumanRenderer {
       this.setupModelProperties(this.model);
       
       let skeleton: THREE.Skeleton | null = null;
+      let skinnedMesh: THREE.SkinnedMesh | null = null;
       this.model.traverse((child) => {
         console.log(`🔍 Checking child:`, child.type, child.name);
         if (child instanceof THREE.SkinnedMesh) {
           skeleton = child.skeleton;
+          skinnedMesh = child;
           console.log(`✅ Found skeleton with ${skeleton.bones.length} bones.`);
         }
       });
 
-      if (skeleton) {
-        this.boneController = new GLTFBoneController(this.scene, skeleton);
+      if (skeleton && skinnedMesh) {
+        this.boneController = new GLTFBoneController(this.scene, skeleton, skinnedMesh);
         
         // Apply current scale to bone controls
         this.boneController.setScale(this.settings.modelScale);
@@ -66,7 +68,7 @@ export class GLTFHumanRenderer {
         window.dispatchEvent(event);
 
       } else {
-        console.error('⚠️ No skeleton found in the GLTF model.');
+        console.error('⚠️ No skeleton or skinned mesh found in the GLTF model.');
       }
 
       this.scene.add(this.model);

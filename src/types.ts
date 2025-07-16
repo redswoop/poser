@@ -67,7 +67,7 @@ export interface ExportData {
 
 export interface UndoAction {
   id: string;
-  type: 'joint-move' | 'character-add' | 'character-delete' | 'preset-apply' | 'character-import' | 'clear-all';
+  type: 'joint-move' | 'character-add' | 'character-delete' | 'preset-apply' | 'character-import' | 'clear-all' | 'ik-solve';
   description: string;
   timestamp: number;
   beforeState: AppState;

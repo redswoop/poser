@@ -83,12 +83,13 @@ header p {
 .main-content {
   display: grid;
   grid-template-columns: 1fr 350px;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   gap: 30px;
   align-items: start;
   grid-template-areas: 
     "canvas controls"
-    "selection controls";
+    "selection controls"
+    "poses controls";
 }
 
 .canvas-container {
@@ -117,6 +118,154 @@ header p {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 0.8em;
+}
+
+.controls-overlay .camera-info {
+  margin-bottom: 5px;
+}
+
+.controls-overlay .rotation-hints {
+  border-top: 1px solid rgba(255,255,255,0.3);
+  padding-top: 5px;
+  margin-top: 5px;
+}
+
+.controls-overlay .rotation-hints .rotation-mode-hint {
+  display: block;
+  opacity: 0.7;
+  transition: all 0.3s ease;
+}
+
+.controls-overlay .rotation-hints .rotation-mode-hint.current-mode {
+  color: #4ade80;
+  font-weight: 600;
+  opacity: 1;
+  text-shadow: 0 0 4px rgba(74, 222, 128, 0.5);
+  transform: translateX(3px);
+}
+
+.controls-overlay .rotation-hints .mode-key {
+  font-family: 'Courier New', monospace;
+  background: rgba(255,255,255,0.2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.controls-overlay .rotation-hints .ik-mode-hint {
+  color: #8a2be2;
+  font-weight: 600;
+  text-shadow: 0 0 4px rgba(138, 43, 226, 0.5);
+}
+
+.controls-overlay .rotation-hints .ik-hint {
+  color: #8a2be2;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.controls-overlay.ik-mode {
+  background: rgba(138, 43, 226, 0.8);
+  border: 2px solid rgba(138, 43, 226, 0.6);
+}
+
+/* IK Chain List Styling */
+.ik-chain-item {
+  margin-bottom: 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #f9f9f9;
+}
+
+.ik-chain-header {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f0f0f0;
+  border-radius: 6px 6px 0 0;
+  user-select: none;
+}
+
+.ik-chain-header:hover {
+  background: #e8e8e8;
+}
+
+.ik-chain-name {
+  font-weight: 600;
+  color: #8a2be2;
+}
+
+.ik-chain-toggle {
+  font-size: 0.8em;
+  color: #666;
+}
+
+.ik-chain-details {
+  padding: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.ik-chain-bones {
+  margin-bottom: 10px;
+}
+
+.bone-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 5px 0;
+}
+
+.bone-item {
+  padding: 2px 8px;
+  margin: 2px 0;
+  background: #ffffff;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85em;
+  color: #555;
+}
+
+.ik-chain-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.ik-chain-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: #8a2be2;
+  color: white;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ik-chain-btn:hover {
+  background: #7a1eb8;
+}
+
+#plane-indicator {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(74, 222, 128, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
+  transition: all 0.3s ease;
+}
+
+#plane-indicator.active {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.5);
 }
 
 .controls {
@@ -189,6 +338,7 @@ header p {
 .character-list,
 .keypoints-panel,
 .settings-panel,
+.ik-panel,
 .undo-redo-panel {
   margin-bottom: 25px;
   padding-bottom: 15px;
@@ -198,6 +348,7 @@ header p {
 .character-list:last-child,
 .keypoints-panel:last-child,
 .settings-panel:last-child,
+.ik-panel:last-child,
 .undo-redo-panel:last-child {
   border-bottom: none;
   margin-bottom: 0;
@@ -343,6 +494,140 @@ header p {
 
 .settings-panel input[type="checkbox"] {
   transform: scale(1.2);
+}
+
+/* IK Panel */
+.ik-panel {
+  margin-bottom: 30px;
+}
+
+.ik-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.ik-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.ik-btn:nth-child(1) {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+
+.ik-btn:nth-child(1):hover {
+  background: linear-gradient(135deg, #218838 0%, #1ba085 100%);
+}
+
+.ik-btn:nth-child(2) {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+}
+
+.ik-btn:nth-child(2):hover {
+  background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%);
+}
+
+.ik-btn:nth-child(3) {
+  background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+  color: #212529;
+}
+
+.ik-btn:nth-child(3):hover {
+  background: linear-gradient(135deg, #e0a800 0%, #d39e00 100%);
+}
+
+.ik-chains-list {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 12px;
+  min-height: 60px;
+}
+
+.no-chains {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  margin: 0;
+  padding: 20px;
+}
+
+.ik-chain-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+}
+
+.ik-chain-item:hover {
+  background: #f0f8ff;
+  border-color: #667eea;
+}
+
+.ik-chain-name {
+  font-weight: 600;
+  color: #495057;
+  text-transform: capitalize;
+}
+
+.ik-chain-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.ik-chain-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ik-chain-btn.target {
+  background: #28a745;
+  color: white;
+}
+
+.ik-chain-btn.target:hover {
+  background: #218838;
+}
+
+.ik-chain-btn.solve {
+  background: #007bff;
+  color: white;
+}
+
+.ik-chain-btn.solve:hover {
+  background: #0056b3;
+}
+
+.ik-chain-btn.remove {
+  background: #dc3545;
+  color: white;
+}
+
+.ik-chain-btn.remove:hover {
+  background: #c82333;
 }
 
 /* Message Toast */
@@ -647,6 +932,75 @@ header p {
   border-radius: 8px;
   padding: 12px 16px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  font-size: 0.9em;
+}
+
+/* Pose Commands Block */
+.pose-commands-container {
+  margin-top: 15px;
+  grid-area: poses;
+}
+
+.pose-commands-block {
+  background: white;
+  border: 2px solid #28a745;
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.pose-commands-header {
+  margin-bottom: 10px;
+}
+
+.pose-commands-header h4 {
+  margin: 0;
+  color: #28a745;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.pose-commands-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pose-cmd-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+  border: 2px solid transparent;
+}
+
+.pose-cmd-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.pose-cmd-btn.reset-pose {
+  color: #28a745;
+  border-color: #28a745;
+}
+
+.pose-cmd-btn.reset-pose:hover {
+  background: #28a745;
+  color: white;
+}
+
+.btn-icon {
+  font-size: 1.1em;
+}
+
+.btn-text {
   font-size: 0.9em;
 }
 

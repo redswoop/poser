@@ -2,39 +2,126 @@ import './style.css';
 import * as THREE from 'three';
 import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
-import { BrowserStateManager } from './BrowserStateManager';
 import type { SceneSettings, GLTFModelSettings } from './types';
 
 class StickFigureApp3D {
   private renderer!: ThreeRenderer;
   private undoRedoManager: UndoRedoManager;
-  private stateManager: BrowserStateManager;
   private isDragging = false;
   private dragTarget: { bone: THREE.Bone; control: THREE.Object3D; originalRotation: THREE.Euler } | null = null;
   private dragStartState: any = null;
   private selectedJoint: string | null = null;
   private currentModelPath: string | null = null;
   private currentModelSettings: GLTFModelSettings | null = null;
+  private ikMode: boolean = false;
+  private activeIKChain: string | null = null;
+  
+  // Interactive IK state
+  private interactiveIKMode: boolean = false;
+  private ikDragTarget: { targetName: string; control: THREE.Object3D; originalPosition: THREE.Vector3 } | null = null;
+  private altPressed: boolean = false;
+  
+  // Store the default pose from when the model was first loaded
+  private defaultPose: Record<string, THREE.Euler> | null = null;
 
   // UI Elements
   private canvasContainer: HTMLElement;
-  private compactSelectionBox: HTMLElement | null = null;
+  
+  // Debounced save function to prevent excessive saving
+  private saveStateTimeout: number | null = null;
+  private readonly SAVE_DEBOUNCE_DELAY = 2000; // 2 seconds
 
   constructor() {
     this.undoRedoManager = new UndoRedoManager();
-    this.stateManager = new BrowserStateManager();
     
     // Get UI elements
-    this.canvasContainer = document.getElementById('three-canvas')!;
+    this.canvasContainer = document.getElementById('three-canvas')!;;
 
     this.initializeRenderer();
     this.setupEventListeners();
     this.setupUI();
     this.setupAutoSave();
     
+    // Initialize rotation hints to show default mode
+    this.updateRotationHints('camera-relative');
+    
     // Debug: Check if there's already saved state
     const existingState = localStorage.getItem('poser3d-app-state');
     console.log('🔍 Initial state check:', existingState ? JSON.parse(existingState) : 'No saved state found');
+    
+    // Add debug methods to window for testing
+    (window as any).debugIK = () => {
+      const boneController = this.renderer.getBoneController();
+      if (boneController) {
+        console.log('🦾 IK Debug Info:');
+        console.log('- IK Chains:', boneController.getIKChainNames());
+        console.log('- IK Mode:', (boneController as any).ikMode);
+        console.log('- IK Targets:', (boneController as any).ikTargets);
+        console.log('- Interactive IK Mode:', this.interactiveIKMode);
+        console.log('- Alt Pressed:', this.altPressed);
+        
+        // Debug IK targets
+        const ikTargets = (boneController as any).ikTargets;
+        if (ikTargets) {
+          console.log('🎯 IK Target Details:');
+          ikTargets.forEach((target: any, targetName: string) => {
+            console.log(`  - ${targetName}:`, {
+              boneName: target.userData?.boneName,
+              chainName: target.userData?.chainName,
+              boneIndex: target.userData?.boneIndex,
+              visible: target.visible,
+              position: target.position
+            });
+          });
+        }
+      }
+    };
+    
+    (window as any).debugBones = () => {
+      const boneController = this.renderer.getBoneController();
+      if (boneController) {
+        const skeleton = (boneController as any).skeleton;
+        if (skeleton) {
+          console.log('🦴 Available Bones:');
+          skeleton.bones.forEach((bone: any, index: number) => {
+            console.log(`  ${index}: ${bone.name}`);
+          });
+          
+          // Specifically look for elbow and knee-like bones
+          console.log('\n🔍 Looking for elbow-like bones:');
+          const elbowBones = skeleton.bones.filter((bone: any) => {
+            const name = bone.name.toLowerCase();
+            return name.includes('elbow') || name.includes('forearm') || name.includes('lowerarm') || name.includes('lower_arm');
+          });
+          elbowBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
+          
+          console.log('\n🔍 Looking for knee-like bones:');
+          const kneeBones = skeleton.bones.filter((bone: any) => {
+            const name = bone.name.toLowerCase();
+            return name.includes('knee') || name.includes('leg') || name.includes('shin') || name.includes('calf') || name.includes('lowerleg') || name.includes('lower_leg');
+          });
+          kneeBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
+          
+          console.log('\n🔍 Looking for all arm bones:');
+          const armBones = skeleton.bones.filter((bone: any) => {
+            const name = bone.name.toLowerCase();
+            return name.includes('arm') || name.includes('hand') || name.includes('shoulder') || name.includes('elbow');
+          });
+          armBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
+          
+          console.log('\n🔍 Looking for all leg bones:');
+          const legBones = skeleton.bones.filter((bone: any) => {
+            const name = bone.name.toLowerCase();
+            return name.includes('leg') || name.includes('foot') || name.includes('thigh') || name.includes('knee') || name.includes('shin') || name.includes('calf');
+          });
+          legBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
+        }
+      }
+    };
+    
+    (window as any).testIKMode = () => {
+      this.enterInteractiveIKMode();
+    };
     
     // Load saved state before auto-loading default model
     this.loadSavedState().then(() => {
@@ -57,7 +144,11 @@ class StickFigureApp3D {
 
   private setupEventListeners(): void {
     // Toolbar buttons
-    document.getElementById('reset-camera')?.addEventListener('click', () => this.renderer.resetCamera());
+    document.getElementById('reset-camera')?.addEventListener('click', () => {
+      this.renderer.resetCamera();
+      // Save state after camera reset
+      this.saveCurrentStateDebounced();
+    });
 
     // Undo/Redo buttons
     document.getElementById('undo-btn')?.addEventListener('click', () => this.undo());
@@ -74,19 +165,44 @@ class StickFigureApp3D {
       } else if (e.key === 't' || e.key === 'T') {
         this.testStateSaving();
       } else if (e.key === 's' || e.key === 'S') {
-        this.saveCurrentState();
+        this.saveCurrentStateImmediate();
       } else if (e.key === 'l' || e.key === 'L') {
         this.loadSavedState();
       }
     });
 
     // Camera view buttons
-    document.getElementById('view-front')?.addEventListener('click', () => this.renderer.setCameraView('front'));
-    document.getElementById('view-back')?.addEventListener('click', () => this.renderer.setCameraView('back'));
-    document.getElementById('view-left')?.addEventListener('click', () => this.renderer.setCameraView('left'));
-    document.getElementById('view-right')?.addEventListener('click', () => this.renderer.setCameraView('right'));
-    document.getElementById('view-top')?.addEventListener('click', () => this.renderer.setCameraView('top'));
-    document.getElementById('view-bottom')?.addEventListener('click', () => this.renderer.setCameraView('bottom'));
+    document.getElementById('view-front')?.addEventListener('click', () => {
+      this.renderer.setCameraView('front');
+      this.saveCurrentStateDebounced();
+    });
+    document.getElementById('view-back')?.addEventListener('click', () => {
+      this.renderer.setCameraView('back');
+      this.saveCurrentStateDebounced();
+    });
+    document.getElementById('view-left')?.addEventListener('click', () => {
+      this.renderer.setCameraView('left');
+      this.saveCurrentStateDebounced();
+    });
+    document.getElementById('view-right')?.addEventListener('click', () => {
+      this.renderer.setCameraView('right');
+      this.saveCurrentStateDebounced();
+    });
+    document.getElementById('view-top')?.addEventListener('click', () => {
+      this.renderer.setCameraView('top');
+      this.saveCurrentStateDebounced();
+    });
+    document.getElementById('view-bottom')?.addEventListener('click', () => {
+      this.renderer.setCameraView('bottom');
+      this.saveCurrentStateDebounced();
+    });
+
+    // Listen for camera changes from OrbitControls
+    const controls = this.renderer.getControls();
+    controls.addEventListener('end', () => {
+      // Save camera position after user interaction ends
+      this.saveCurrentStateDebounced();
+    });
 
     // Settings
     this.setupSettingsEventListeners();
@@ -133,6 +249,12 @@ class StickFigureApp3D {
     // JSON Pose Editor Modal
     this.setupJsonPoseEditor();
 
+    // IK Panel
+    this.setupIKPanel();
+    
+    // Pose Commands
+    this.setupPoseCommands();
+
     // Mouse events for 3D bone control interaction
     this.setupMouseEventListeners();
 
@@ -144,6 +266,34 @@ class StickFigureApp3D {
       console.log('🎮 GLTF bone controls are ready');
       const customEvent = event as CustomEvent;
       this.setupBoneControlInteraction(customEvent.detail.controls);
+      
+      // Make sure bone controls are visible initially
+      const boneController = this.renderer.getBoneController();
+      if (boneController) {
+        console.log('🔧 Setting up initial bone control visibility');
+        this.renderer.boneControlMode = true;
+        this.renderer.updateBoneController();
+        
+        // Apply saved bone depth limit if available
+        this.applySavedBoneDepthLimit();
+      }
+      
+      // Capture the default pose when model is first loaded
+      setTimeout(() => {
+        const currentBoneRotations = this.renderer.getBoneRotations();
+        if (Object.keys(currentBoneRotations).length > 0) {
+          // Clone the rotations to store as default pose
+          const defaultRotations: Record<string, THREE.Euler> = {};
+          Object.entries(currentBoneRotations).forEach(([boneName, euler]) => {
+            defaultRotations[boneName] = euler.clone();
+          });
+          this.defaultPose = defaultRotations;
+          console.log('💾 Default pose captured:', Object.keys(defaultRotations).length, 'bones');
+        }
+      }, 100);
+      
+      // Update IK chains list when model is loaded
+      this.updateIKChainsList();
     });
   }
 
@@ -158,82 +308,149 @@ class StickFigureApp3D {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Shift') shiftPressed = true;
       if (e.key === 'Control') ctrlPressed = true;
+      if (e.key === 'Alt') {
+        this.altPressed = true;
+        this.enterInteractiveIKMode();
+      }
       
       if (e.key === 'Escape') {
         this.clearSelection();
         return;
       }
       
-      // Update movement mode based on modifier keys
-      if (shiftPressed && ctrlPressed) {
-        movementMode = 'yz';
-      } else if (shiftPressed) {
-        movementMode = 'xz';
-      } else if (ctrlPressed) {
-        movementMode = 'xy';
-      } else {
-        movementMode = 'camera-relative';
+      // Update movement mode based on modifier keys (only when not in IK mode)
+      if (!this.interactiveIKMode) {
+        const previousMode = movementMode;
+        if (shiftPressed && ctrlPressed) {
+          movementMode = 'yz';
+        } else if (shiftPressed) {
+          movementMode = 'xz';
+        } else if (ctrlPressed) {
+          movementMode = 'xy';
+        } else {
+          movementMode = 'camera-relative';
+        }
+        
+        // Update hints whenever mode changes, even when not dragging
+        if (movementMode !== previousMode) {
+          this.updateRotationHints(movementMode);
+          this.renderer.setMovementPlane(movementMode);
+          
+          // Show temporary plane indicator when switching modes (but not dragging)
+          if (!this.isDragging && movementMode !== 'camera-relative') {
+            this.showTemporaryModeIndicator(movementMode);
+          }
+        }
       }
-      
-      this.updatePlaneIndicator(movementMode);
-      this.renderer.setMovementPlane(movementMode);
     });
 
     document.addEventListener('keyup', (e) => {
       if (e.key === 'Shift') shiftPressed = false;
       if (e.key === 'Control') ctrlPressed = false;
-      
-      // Update movement mode
-      if (shiftPressed && ctrlPressed) {
-        movementMode = 'yz';
-      } else if (shiftPressed) {
-        movementMode = 'xz';
-      } else if (ctrlPressed) {
-        movementMode = 'xy';
-      } else {
-        movementMode = 'camera-relative';
+      if (e.key === 'Alt') {
+        this.altPressed = false;
+        this.exitInteractiveIKMode();
       }
-      this.updatePlaneIndicator(movementMode);
-      this.renderer.setMovementPlane(movementMode);
+      
+      // Update movement mode (only when not in IK mode)
+      if (!this.interactiveIKMode) {
+        const previousMode = movementMode;
+        if (shiftPressed && ctrlPressed) {
+          movementMode = 'yz';
+        } else if (shiftPressed) {
+          movementMode = 'xz';
+        } else if (ctrlPressed) {
+          movementMode = 'xy';
+        } else {
+          movementMode = 'camera-relative';
+        }
+        
+        // Update hints whenever mode changes
+        if (movementMode !== previousMode) {
+          this.updateRotationHints(movementMode);
+          this.renderer.setMovementPlane(movementMode);
+          
+          // Hide temporary indicator when returning to camera-relative mode
+          if (!this.isDragging && movementMode === 'camera-relative') {
+            this.hideTemporaryModeIndicator();
+          }
+        }
+      }
     });
 
     this.canvasContainer.addEventListener('mousedown', (e) => {
       mouseDownPos = { x: e.clientX, y: e.clientY };
       
       console.log(`🖱️ Mouse down at: ${e.clientX}, ${e.clientY}`);
-      console.log(`🖱️ Bone control mode: ${this.renderer.boneControlMode}`);
+      console.log(`🖱️ IK Mode: ${this.interactiveIKMode}, Bone control mode: ${this.renderer.boneControlMode}`);
       
-      // Check for bone control interaction
-      const boneControlResult = this.renderer.raycastBoneControls(e.clientX, e.clientY);
-      
-      if (boneControlResult) {
-        console.log(`🎯 Selected bone: ${boneControlResult.bone.name}`);
+      // Check for IK control interaction first
+      if (this.interactiveIKMode) {
+        const ikControlResult = this.renderer.raycastIKControls(e.clientX, e.clientY);
         
-        // Save state for undo before starting drag
-        this.dragStartState = this.getCurrentState();
+        if (ikControlResult) {
+          console.log(`🎯 Selected IK target: ${ikControlResult.targetName}`);
+          
+          // Save state for undo before starting IK drag
+          this.dragStartState = this.getCurrentState();
+          
+          this.isDragging = true;
+          this.ikDragTarget = {
+            targetName: ikControlResult.targetName,
+            control: ikControlResult.control,
+            originalPosition: ikControlResult.control.position.clone()
+          };
+          
+          // Disable orbit controls while dragging
+          this.renderer.getControls().enabled = false;
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Show IK indicator
+          this.showIKModeIndicator(ikControlResult.targetName);
+          
+          return;
+        }
+      } else {
+        // Regular bone control interaction
+        const boneControlResult = this.renderer.raycastBoneControls(e.clientX, e.clientY);
         
-        this.isDragging = true;
-        this.dragTarget = {
-          bone: boneControlResult.bone,
-          control: boneControlResult.control,
-          originalRotation: boneControlResult.bone.rotation.clone()
-        };
-        
-        // Disable orbit controls while dragging
-        this.renderer.getControls().enabled = false;
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // Show plane indicator
-        this.updatePlaneIndicator(movementMode);
-        this.renderer.setMovementPlane(movementMode);
-        
-        return;
+        if (boneControlResult) {
+          console.log(`🎯 Selected bone: ${boneControlResult.bone.name}`);
+          
+          // Save state for undo before starting drag
+          this.dragStartState = this.getCurrentState();
+          
+          this.isDragging = true;
+          this.dragTarget = {
+            bone: boneControlResult.bone,
+            control: boneControlResult.control,
+            originalRotation: boneControlResult.bone.rotation.clone()
+          };
+          
+          // Disable orbit controls while dragging
+          this.renderer.getControls().enabled = false;
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Show plane indicator
+          this.updatePlaneIndicator(movementMode);
+          this.renderer.setMovementPlane(movementMode);
+          
+          return;
+        }
       }
     });
 
     this.canvasContainer.addEventListener('click', (e) => {
       if (!this.isDragging) {
+        // Check if we're in IK mode first
+        if (this.ikMode && this.activeIKChain) {
+          const worldPos = this.worldPositionFromMouse(e.clientX, e.clientY);
+          this.handleIKClick(worldPos);
+          return;
+        }
+
         const boneControlResult = this.renderer.raycastBoneControls(e.clientX, e.clientY);
         
         if (boneControlResult) {
@@ -248,57 +465,84 @@ class StickFigureApp3D {
     });
 
     this.canvasContainer.addEventListener('mousemove', (e) => {
-      if (this.isDragging && this.dragTarget) {
+      if (this.isDragging) {
         const deltaX = e.clientX - mouseDownPos.x;
         const deltaY = e.clientY - mouseDownPos.y;
         
-        // Handle bone control rotation
-        const rotationSensitivity = 0.01;
-        let deltaRotation = { x: 0, y: 0, z: 0 };
-        
-        switch (movementMode) {
-          case 'camera-relative':
-            // For camera-relative, convert mouse movement to rotation around appropriate axes
-            deltaRotation = {
-              x: -deltaY * rotationSensitivity, // Mouse up/down -> rotate around X axis
-              y: deltaX * rotationSensitivity,  // Mouse left/right -> rotate around Y axis
-              z: 0
-            };
-            break;
-          case 'xy':
-            deltaRotation = {
-              x: -deltaY * rotationSensitivity,
-              y: deltaX * rotationSensitivity,
-              z: 0
-            };
-            break;
-          case 'xz':
-            deltaRotation = {
-              x: 0,
-              y: deltaX * rotationSensitivity,
-              z: deltaY * rotationSensitivity
-            };
-            break;
-          case 'yz':
-            deltaRotation = {
-              x: -deltaY * rotationSensitivity,
-              y: 0,
-              z: deltaX * rotationSensitivity
-            };
-            break;
-        }
-        
-        // Apply rotation to bone
-        this.dragTarget.bone.rotation.x += deltaRotation.x;
-        this.dragTarget.bone.rotation.y += deltaRotation.y;
-        this.dragTarget.bone.rotation.z += deltaRotation.z;
-        
-        // Update bone controller
-        this.renderer.updateBoneController();
-        
-        // Update selection UI if a joint is selected
-        if (this.selectedJoint && this.dragTarget && this.dragTarget.bone.name === this.selectedJoint) {
-          this.updateSelectionUI(this.dragTarget.bone);
+        if (this.ikDragTarget) {
+          // Handle IK dragging
+          console.log(`🦾 IK dragging: ${this.ikDragTarget.targetName}`);
+          
+          // Convert mouse movement to world position
+          const worldPos = this.worldPositionFromMouse(e.clientX, e.clientY);
+          
+          // Solve IK to move the specific joint to the new position
+          const boneController = this.renderer.getBoneController();
+          if (boneController) {
+            const success = boneController.solveIKForJoint(this.ikDragTarget.targetName, worldPos);
+            if (success) {
+              // Update the visual IK target position
+              this.ikDragTarget.control.position.copy(worldPos);
+              
+              // Update bone controller to refresh positions
+              this.renderer.updateBoneController();
+              
+              // Force update of bone control positions after IK solve
+              setTimeout(() => {
+                boneController.update();
+              }, 10);
+            }
+          }
+          
+        } else if (this.dragTarget) {
+          // Handle regular bone rotation dragging
+          const rotationSensitivity = 0.01;
+          let deltaRotation = { x: 0, y: 0, z: 0 };
+          
+          switch (movementMode) {
+            case 'camera-relative':
+              // For camera-relative, convert mouse movement to rotation around appropriate axes
+              deltaRotation = {
+                x: -deltaY * rotationSensitivity, // Mouse up/down -> rotate around X axis
+                y: deltaX * rotationSensitivity,  // Mouse left/right -> rotate around Y axis
+                z: 0
+              };
+              break;
+            case 'xy':
+              deltaRotation = {
+                x: -deltaY * rotationSensitivity,
+                y: deltaX * rotationSensitivity,
+                z: 0
+              };
+              break;
+            case 'xz':
+              deltaRotation = {
+                x: 0,
+                y: deltaX * rotationSensitivity,
+                z: deltaY * rotationSensitivity
+              };
+              break;
+            case 'yz':
+              deltaRotation = {
+                x: -deltaY * rotationSensitivity,
+                y: 0,
+                z: deltaX * rotationSensitivity
+              };
+              break;
+          }
+          
+          // Apply rotation to bone
+          this.dragTarget.bone.rotation.x += deltaRotation.x;
+          this.dragTarget.bone.rotation.y += deltaRotation.y;
+          this.dragTarget.bone.rotation.z += deltaRotation.z;
+          
+          // Update bone controller
+          this.renderer.updateBoneController();
+          
+          // Update selection UI if a joint is selected
+          if (this.selectedJoint && this.dragTarget && this.dragTarget.bone.name === this.selectedJoint) {
+            this.updateSelectionUI(this.dragTarget.bone);
+          }
         }
         
         // Update mouse position for next delta calculation
@@ -312,22 +556,35 @@ class StickFigureApp3D {
         this.renderer.getControls().enabled = true;
         
         // Save action to history if we actually dragged something
-        if (this.dragStartState && this.dragTarget) {
-          const boneName = this.dragTarget.bone.name || 'Unknown Bone';
-          console.log(`=== SAVING BONE MOVEMENT ===`);
-          console.log(`Bone: ${boneName}`);
+        if (this.dragStartState) {
+          if (this.ikDragTarget) {
+            // Save IK action
+            const targetName = this.ikDragTarget.targetName;
+            console.log(`=== SAVING IK MOVEMENT ===`);
+            console.log(`Target: ${targetName}`);
+            
+            this.saveAction('ik-solve', `IK Solve: ${targetName}`, this.dragStartState);
+            console.log(`=== END IK MOVEMENT SAVE ===`);
+          } else if (this.dragTarget) {
+            // Save bone rotation action
+            const boneName = this.dragTarget.bone.name || 'Unknown Bone';
+            console.log(`=== SAVING BONE MOVEMENT ===`);
+            console.log(`Bone: ${boneName}`);
+            
+            this.saveAction('bone-move', `Moved ${boneName}`, this.dragStartState);
+            console.log(`=== END BONE MOVEMENT SAVE ===`);
+          }
           
-          this.saveAction('bone-move', `Moved ${boneName}`, this.dragStartState);
-          console.log(`=== END BONE MOVEMENT SAVE ===`);
-          
-          // Save the current state after bone movement
-          this.saveCurrentState();
+          // Save the current state after movement
+          this.saveCurrentStateDebounced();
         }
       }
       this.isDragging = false;
       this.dragTarget = null;
+      this.ikDragTarget = null;
       this.dragStartState = null;
       this.hidePlaneIndicator();
+      this.hideIKModeIndicator();
     });
   }
 
@@ -341,7 +598,7 @@ class StickFigureApp3D {
       this.renderer.updateSettings(settings);
       
       // Save state after UI change
-      this.saveCurrentState();
+      this.saveCurrentStateDebounced();
     });
 
     // glTF model controls
@@ -359,7 +616,7 @@ class StickFigureApp3D {
           this.showMessage(`Loaded 3D model: ${file.name}`, 'success');
           
           // Save the state after loading a new model
-          this.saveCurrentState();
+          this.saveCurrentStateImmediate();
         } catch (error) {
           this.showMessage(`Error loading model: ${error}`, 'error');
         }
@@ -384,7 +641,7 @@ class StickFigureApp3D {
       
       // Save state after UI change
       console.log('🔄 Triggering save after opacity change');
-      this.saveCurrentState();
+      this.saveCurrentStateDebounced();
     });
 
     modelScaleSlider?.addEventListener('input', () => {
@@ -403,7 +660,7 @@ class StickFigureApp3D {
       }
       
       // Save state after UI change
-      this.saveCurrentState();
+      this.saveCurrentStateDebounced();
     });
 
     // Bone depth limit slider
@@ -421,7 +678,7 @@ class StickFigureApp3D {
       console.log(`🔍 Bone depth limit set to: ${depthLimit}`);
       
       // Save state after UI change
-      this.saveCurrentState();
+      this.saveCurrentStateDebounced();
     });
 
     showGltfModelCheckbox?.addEventListener('change', () => {
@@ -431,13 +688,14 @@ class StickFigureApp3D {
       this.currentModelSettings = this.renderer.getGLTFSettings();
       
       // Save state after UI change
-      this.saveCurrentState();
+      this.saveCurrentStateDebounced();
     });
   }
 
   private setupCollapsiblePanels(): void {
     const panels = [
       { toggle: 'settings-toggle', container: 'settings-content' },
+      { toggle: 'ik-toggle', container: 'ik-content' },
       { toggle: 'undo-redo-toggle', container: 'undo-redo-content' }
     ];
 
@@ -448,6 +706,9 @@ class StickFigureApp3D {
       toggle?.addEventListener('click', () => {
         container?.classList.toggle('collapsed');
         toggle.classList.toggle('collapsed');
+        
+        // Save state when panel state changes
+        this.saveCurrentStateDebounced();
       });
     });
   }
@@ -458,8 +719,6 @@ class StickFigureApp3D {
   }
 
   private initializeSelectionPanel(): void {
-    this.compactSelectionBox = document.getElementById('compact-selection-box');
-    
     // Set up reset joint button
     document.getElementById('reset-joint-btn-compact')?.addEventListener('click', () => {
       this.resetSelectedJoint();
@@ -481,7 +740,7 @@ class StickFigureApp3D {
       this.showMessage('Default character model loaded automatically', 'success');
       
       // Save the state after loading the default model
-      this.saveCurrentState();
+      this.saveCurrentStateImmediate();
       
     } catch (error) {
       console.warn('⚠️ Could not load default GLB model:', error);
@@ -502,8 +761,17 @@ class StickFigureApp3D {
     this.showSelectionPanel();
     this.renderer.highlightBoneControl(bone.name);
     
+    // Make rotation hints more prominent when a joint is selected
+    const rotationHints = document.querySelector('.rotation-hints') as HTMLElement;
+    if (rotationHints) {
+      rotationHints.style.background = 'rgba(74, 222, 128, 0.1)';
+      rotationHints.style.borderRadius = '4px';
+      rotationHints.style.padding = '6px';
+      rotationHints.style.border = '1px solid rgba(74, 222, 128, 0.3)';
+    }
+    
     // Save the current state with the selected joint
-    this.saveCurrentState();
+    this.saveCurrentStateDebounced();
   }
 
   private clearSelection(): void {
@@ -511,6 +779,15 @@ class StickFigureApp3D {
     this.selectedJoint = null;
     this.hideSelectionPanel();
     this.renderer.highlightBoneControl(null);
+    
+    // Reset rotation hints styling when nothing is selected
+    const rotationHints = document.querySelector('.rotation-hints') as HTMLElement;
+    if (rotationHints) {
+      rotationHints.style.background = '';
+      rotationHints.style.borderRadius = '';
+      rotationHints.style.padding = '';
+      rotationHints.style.border = '';
+    }
     
     // Reset selection UI elements
     const nameElement = document.getElementById('selected-joint-name-compact');
@@ -551,7 +828,7 @@ class StickFigureApp3D {
         this.showMessage(`Reset ${this.selectedJoint} joint`, 'info');
         
         // Save the current state after reset
-        this.saveCurrentState();
+        this.saveCurrentStateImmediate();
       }
     }
   }
@@ -621,7 +898,8 @@ class StickFigureApp3D {
       timestamp: Date.now(),
       boneRotations: this.renderer.getBoneRotations(),
       modelPath: this.currentModelPath,
-      modelSettings: this.currentModelSettings
+      modelSettings: this.currentModelSettings,
+      boneDepthLimit: this.renderer.getBoneDepthLimit()
     };
   }
 
@@ -695,7 +973,7 @@ class StickFigureApp3D {
     }
     
     // Save the current state to keep it in sync
-    this.saveCurrentState();
+    this.saveCurrentStateDebounced();
   }
 
   private updateUndoRedoUI(): void {
@@ -757,14 +1035,251 @@ class StickFigureApp3D {
     const indicator = document.getElementById('plane-indicator');
     if (indicator) {
       indicator.style.display = 'block';
-      indicator.textContent = `Movement Mode: ${movementMode.toUpperCase()}`;
+      indicator.classList.add('active');
+      
+      let modeText = '';
+      switch (movementMode) {
+        case 'camera-relative':
+          modeText = '🎥 Camera-Relative Rotation';
+          break;
+        case 'xy':
+          modeText = '🔒 XY Plane Lock (Ctrl)';
+          break;
+        case 'xz':
+          modeText = '🔒 XZ Plane Lock (Shift)';
+          break;
+        case 'yz':
+          modeText = '🔒 YZ Plane Lock (Shift+Ctrl)';
+          break;
+      }
+      indicator.textContent = modeText;
     }
+    
+    // Update rotation hints to highlight current mode
+    this.updateRotationHints(movementMode);
   }
 
   private hidePlaneIndicator(): void {
     const indicator = document.getElementById('plane-indicator');
     if (indicator) {
       indicator.style.display = 'none';
+      indicator.classList.remove('active');
+    }
+    
+    // Reset rotation hints to default state
+    this.updateRotationHints('camera-relative');
+  }
+
+  private updateRotationHints(movementMode: string): void {
+    // Clear all current mode classes
+    const hints = document.querySelectorAll('.rotation-mode-hint');
+    hints.forEach(hint => hint.classList.remove('current-mode'));
+    
+    // Highlight the current mode
+    let currentModeId = '';
+    switch (movementMode) {
+      case 'camera-relative':
+        currentModeId = 'rotation-mode-none';
+        break;
+      case 'xz':
+        currentModeId = 'rotation-mode-shift';
+        break;
+      case 'xy':
+        currentModeId = 'rotation-mode-ctrl';
+        break;
+      case 'yz':
+        currentModeId = 'rotation-mode-shift-ctrl';
+        break;
+    }
+    
+    const currentHint = document.getElementById(currentModeId);
+    if (currentHint) {
+      currentHint.classList.add('current-mode');
+    }
+  }
+
+  private showTemporaryModeIndicator(movementMode: string): void {
+    const indicator = document.getElementById('plane-indicator');
+    if (indicator) {
+      indicator.style.display = 'block';
+      indicator.classList.add('active');
+      
+      let modeText = '';
+      switch (movementMode) {
+        case 'xy':
+          modeText = '🔒 XY Plane Ready (Ctrl)';
+          break;
+        case 'xz':
+          modeText = '🔒 XZ Plane Ready (Shift)';
+          break;
+        case 'yz':
+          modeText = '🔒 YZ Plane Ready (Shift+Ctrl)';
+          break;
+      }
+      indicator.textContent = modeText;
+      
+      // Auto-hide after 2 seconds if not dragging
+      setTimeout(() => {
+        if (!this.isDragging && movementMode !== 'camera-relative') {
+          this.hideTemporaryModeIndicator();
+        }
+      }, 2000);
+    }
+  }
+
+  private hideTemporaryModeIndicator(): void {
+    const indicator = document.getElementById('plane-indicator');
+    if (indicator && !this.isDragging) {
+      indicator.style.display = 'none';
+      indicator.classList.remove('active');
+    }
+  }
+
+  private enterInteractiveIKMode(): void {
+    console.log('🦾 Entering Interactive IK Mode');
+    this.interactiveIKMode = true;
+    
+    // Ensure IK chains are set up
+    const boneController = this.renderer.getBoneController();
+    if (boneController) {
+      // Check if IK chains exist, if not create them
+      const chainNames = boneController.getIKChainNames();
+      console.log('🔍 Existing IK chains:', chainNames);
+      
+      if (chainNames.length === 0) {
+        console.log('📝 No IK chains found, creating default chains...');
+        this.setupIKChains();
+        
+        // Check again after setup
+        const newChainNames = boneController.getIKChainNames();
+        console.log('🔍 After setup, IK chains:', newChainNames);
+      } else {
+        console.log('✅ IK chains already exist, using existing ones');
+      }
+    } else {
+      console.error('❌ No bone controller found!');
+      return;
+    }
+    
+    // Hide regular bone controls and show IK controls
+    this.renderer.setIKMode(true);
+    
+    // Update UI to show IK mode
+    this.showIKModeUI();
+    
+    // Update rotation hints to show IK mode
+    this.updateRotationHintsForIK();
+  }
+
+  private exitInteractiveIKMode(): void {
+    console.log('🔄 Exiting Interactive IK Mode');
+    this.interactiveIKMode = false;
+    this.altPressed = false; // Make sure we reset the alt pressed state
+    
+    // Show regular bone controls and hide IK controls
+    this.renderer.setIKMode(false);
+    
+    // Reset UI
+    this.hideIKModeUI();
+    
+    // Reset rotation hints
+    this.updateRotationHints('camera-relative');
+  }
+
+  private showIKModeUI(): void {
+    // Update the controls overlay to show IK mode
+    const controlsOverlay = document.querySelector('.controls-overlay') as HTMLElement;
+    if (controlsOverlay) {
+      controlsOverlay.style.background = 'rgba(138, 43, 226, 0.8)'; // Purple background for IK mode
+      controlsOverlay.style.border = '2px solid rgba(138, 43, 226, 0.6)';
+    }
+    
+    // Show IK mode indicator
+    const indicator = document.getElementById('plane-indicator');
+    if (indicator) {
+      indicator.style.display = 'block';
+      indicator.style.background = 'rgba(138, 43, 226, 0.9)';
+      indicator.textContent = '🦾 Interactive IK Mode - Drag End Effectors';
+      indicator.classList.add('active');
+    }
+  }
+
+  private hideIKModeUI(): void {
+    // Reset controls overlay
+    const controlsOverlay = document.querySelector('.controls-overlay') as HTMLElement;
+    if (controlsOverlay) {
+      controlsOverlay.style.background = 'rgba(0,0,0,0.7)';
+      controlsOverlay.style.border = '';
+      controlsOverlay.classList.remove('ik-mode');
+    }
+    
+    // Restore original rotation hints structure
+    const rotationHints = document.querySelector('.rotation-hints') as HTMLElement;
+    if (rotationHints) {
+      rotationHints.innerHTML = `
+        <small><strong>Joint Rotation:</strong></small><br>
+        <small id="rotation-mode-none" class="rotation-mode-hint">
+          <span class="mode-key">None</span>: Camera-relative
+        </small><br>
+        <small id="rotation-mode-shift" class="rotation-mode-hint">
+          <span class="mode-key">Shift</span>: XZ Plane Lock
+        </small><br>
+        <small id="rotation-mode-ctrl" class="rotation-mode-hint">
+          <span class="mode-key">Ctrl</span>: XY Plane Lock
+        </small><br>
+        <small id="rotation-mode-shift-ctrl" class="rotation-mode-hint">
+          <span class="mode-key">Shift+Ctrl</span>: YZ Plane Lock
+        </small><br>
+        <small class="ik-hint">
+          <span class="mode-key">Alt</span>: Interactive IK Mode
+        </small>
+      `;
+      rotationHints.style.background = '';
+      rotationHints.style.border = '';
+    }
+  }
+
+  private updateRotationHintsForIK(): void {
+    // Clear all current mode classes
+    const hints = document.querySelectorAll('.rotation-mode-hint');
+    hints.forEach(hint => hint.classList.remove('current-mode'));
+    
+    // Update the rotation hints container to show IK info
+    const rotationHints = document.querySelector('.rotation-hints') as HTMLElement;
+    if (rotationHints) {
+      rotationHints.innerHTML = `
+        <small><strong>🦾 IK Mode Active:</strong></small><br>
+        <small class="ik-mode-hint current-mode">
+          <span class="mode-key">Alt</span>: Interactive Kinematics
+        </small><br>
+        <small>Drag end effectors to pose limbs</small><br>
+        <small>Release Alt to return to joint mode</small>
+      `;
+      rotationHints.style.background = 'rgba(138, 43, 226, 0.1)';
+      rotationHints.style.border = '1px solid rgba(138, 43, 226, 0.3)';
+    }
+  }
+
+  private showIKModeIndicator(chainName: string): void {
+    const indicator = document.getElementById('plane-indicator');
+    if (indicator) {
+      indicator.style.display = 'block';
+      indicator.style.background = 'rgba(138, 43, 226, 0.9)';
+      indicator.textContent = `🦾 Solving IK: ${chainName}`;
+      indicator.classList.add('active');
+    }
+  }
+
+  private hideIKModeIndicator(): void {
+    if (this.interactiveIKMode) {
+      // Return to general IK mode indicator
+      this.showIKModeUI();
+    } else {
+      const indicator = document.getElementById('plane-indicator');
+      if (indicator) {
+        indicator.style.display = 'none';
+        indicator.classList.remove('active');
+      }
     }
   }
 
@@ -786,6 +1301,16 @@ class StickFigureApp3D {
       // Restore model path and settings
       this.currentModelPath = state.modelPath || null;
       this.currentModelSettings = state.modelSettings || null;
+      
+      // Restore default pose
+      if (state.defaultPose) {
+        const defaultRotations: Record<string, THREE.Euler> = {};
+        Object.entries(state.defaultPose).forEach(([name, rotData]: [string, any]) => {
+          defaultRotations[name] = new THREE.Euler(rotData.x, rotData.y, rotData.z, rotData.order as THREE.EulerOrder);
+        });
+        this.defaultPose = defaultRotations;
+        console.log('🔄 Default pose restored:', Object.keys(defaultRotations).length, 'bones');
+      }
       
       // Load model if we have one
       if (this.currentModelPath) {
@@ -839,6 +1364,63 @@ class StickFigureApp3D {
         camera.position.set(state.cameraPosition.x, state.cameraPosition.y, state.cameraPosition.z);
         controls.target.set(state.cameraTarget.x, state.cameraTarget.y, state.cameraTarget.z);
         controls.update();
+        console.log('📷 Camera position restored');
+      }
+      
+      // Restore scene settings
+      if (state.sceneSettings) {
+        console.log('🎨 Restoring scene settings:', state.sceneSettings);
+        this.renderer.updateSettings(state.sceneSettings);
+        
+        // Update UI to reflect scene settings
+        const gridVisibleCheckbox = document.getElementById('grid-visible') as HTMLInputElement;
+        if (gridVisibleCheckbox && state.sceneSettings.gridVisible !== undefined) {
+          gridVisibleCheckbox.checked = state.sceneSettings.gridVisible;
+        }
+      }
+      
+      // Restore panel states
+      if (state.panelStates) {
+        console.log('📂 Restoring panel states:', state.panelStates);
+        
+        // Settings panel
+        const settingsContent = document.getElementById('settings-content');
+        const settingsToggle = document.getElementById('settings-toggle');
+        if (settingsContent && settingsToggle) {
+          if (state.panelStates.settingsExpanded) {
+            settingsContent.classList.remove('collapsed');
+            settingsToggle.classList.remove('collapsed');
+          } else {
+            settingsContent.classList.add('collapsed');
+            settingsToggle.classList.add('collapsed');
+          }
+        }
+        
+        // IK panel
+        const ikContent = document.getElementById('ik-content');
+        const ikToggle = document.getElementById('ik-toggle');
+        if (ikContent && ikToggle) {
+          if (state.panelStates.ikExpanded) {
+            ikContent.classList.remove('collapsed');
+            ikToggle.classList.remove('collapsed');
+          } else {
+            ikContent.classList.add('collapsed');
+            ikToggle.classList.add('collapsed');
+          }
+        }
+        
+        // Undo/Redo panel
+        const undoRedoContent = document.getElementById('undo-redo-content');
+        const undoRedoToggle = document.getElementById('undo-redo-toggle');
+        if (undoRedoContent && undoRedoToggle) {
+          if (state.panelStates.undoRedoExpanded) {
+            undoRedoContent.classList.remove('collapsed');
+            undoRedoToggle.classList.remove('collapsed');
+          } else {
+            undoRedoContent.classList.add('collapsed');
+            undoRedoToggle.classList.add('collapsed');
+          }
+        }
       }
       
       // Restore selected joint
@@ -906,11 +1488,14 @@ class StickFigureApp3D {
   }
 
   private saveCurrentState(): void {
-    console.log('💾 === SAVE CURRENT STATE CALLED ===');
+    console.log('💾 === ACTUALLY SAVING STATE NOW ===');
     
     try {
       const camera = this.renderer.getCamera();
       const controls = this.renderer.getControls();
+      
+      // Get current scene settings
+      const sceneSettings = this.renderer.getSettings();
       
       // Get current bone rotations and convert to plain objects
       const currentBoneRotations = this.renderer.getBoneRotations();
@@ -925,42 +1510,84 @@ class StickFigureApp3D {
         };
       });
       
-      console.log('💾 Saving bone rotations:', Object.keys(serializedBoneRotations).length, 'bones');
+      // Get current UI panel states
+      const panelStates = {
+        settingsExpanded: !document.getElementById('settings-content')?.classList.contains('collapsed'),
+        ikExpanded: !document.getElementById('ik-content')?.classList.contains('collapsed'),
+        undoRedoExpanded: !document.getElementById('undo-redo-content')?.classList.contains('collapsed')
+      };
       
-      // Simple state object
+      console.log('💾 Saving bone rotations:', Object.keys(serializedBoneRotations).length, 'bones');
+      console.log('💾 Saving scene settings:', sceneSettings);
+      console.log('💾 Saving panel states:', panelStates);
+      
+      // Complete state object
       const state = {
         timestamp: Date.now(),
         modelPath: this.currentModelPath,
         modelSettings: this.currentModelSettings,
+        sceneSettings: sceneSettings,
         boneRotations: serializedBoneRotations,
+        defaultPose: this.defaultPose ? Object.fromEntries(
+          Object.entries(this.defaultPose).map(([name, euler]) => [
+            name,
+            { x: euler.x, y: euler.y, z: euler.z, order: euler.order }
+          ])
+        ) : null,
         selectedJoint: this.selectedJoint,
         boneDepthLimit: this.renderer.getBoneDepthLimit(),
         cameraPosition: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-        cameraTarget: { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+        cameraTarget: { x: controls.target.x, y: controls.target.y, z: controls.target.z },
+        panelStates: panelStates
       };
       
       // Save directly to localStorage
       localStorage.setItem('poser3d-simple-state', JSON.stringify(state));
-      console.log('✅ State saved to localStorage');
+      console.log('✅ State saved to localStorage at', new Date().toLocaleTimeString());
       
     } catch (error) {
       console.error('❌ Error saving state:', error);
     }
   }
 
-  private setupAutoSave(): void {
-    // Set up auto-save event listener
-    document.addEventListener('poser3d-auto-save', () => {
-      this.saveCurrentState();
-    });
+  private saveCurrentStateDebounced(): void {
+    console.log('⏰ Debounced save triggered - scheduling save in', this.SAVE_DEBOUNCE_DELAY, 'ms');
     
+    // Clear existing timeout
+    if (this.saveStateTimeout) {
+      console.log('⏰ Clearing existing save timeout');
+      clearTimeout(this.saveStateTimeout);
+    }
+    
+    // Set new timeout
+    this.saveStateTimeout = window.setTimeout(() => {
+      console.log('⏰ Debounced save timeout expired - saving now');
+      this.saveCurrentState();
+      this.saveStateTimeout = null;
+    }, this.SAVE_DEBOUNCE_DELAY);
+  }
+
+  private saveCurrentStateImmediate(): void {
+    console.log('🚀 Immediate save triggered');
+    
+    // Clear any pending debounced save
+    if (this.saveStateTimeout) {
+      clearTimeout(this.saveStateTimeout);
+      this.saveStateTimeout = null;
+    }
+    
+    // Save immediately
+    this.saveCurrentState();
+  }
+
+  private setupAutoSave(): void {
     // Save state when page is about to unload
     window.addEventListener('beforeunload', () => {
-      this.saveCurrentState();
+      this.saveCurrentStateImmediate();
     });
     
-    // Mark state as dirty when changes occur
-    this.stateManager.markDirty();
+    // Don't mark state as dirty automatically - we'll handle our own debounced saving
+    // this.stateManager.markDirty();
   }
 
   public exportCharacterState(): string {
@@ -1012,7 +1639,7 @@ class StickFigureApp3D {
           }
           
           // Save the imported state
-          this.saveCurrentState();
+          this.saveCurrentStateImmediate();
           
           this.showMessage('Character state imported successfully', 'success');
         }).catch(error => {
@@ -1036,7 +1663,7 @@ class StickFigureApp3D {
         }
         
         // Save the imported state
-        this.saveCurrentState();
+        this.saveCurrentStateImmediate();
         
         this.showMessage('Character pose imported successfully', 'success');
       }
@@ -1193,6 +1820,241 @@ class StickFigureApp3D {
     }
   }
 
+  private setupIKPanel(): void {
+    const setupBtn = document.getElementById('setup-ik-chains');
+    const clearBtn = document.getElementById('clear-ik-chains');
+    const testBtn = document.getElementById('test-ik');
+    
+    setupBtn?.addEventListener('click', () => {
+      this.setupIKChains();
+    });
+    
+    clearBtn?.addEventListener('click', () => {
+      this.clearIKChains();
+    });
+
+    testBtn?.addEventListener('click', () => {
+      this.testIK();
+    });
+  }
+
+  private setupPoseCommands(): void {
+    const resetToDefaultBtn = document.getElementById('reset-to-default-pose');
+    
+    resetToDefaultBtn?.addEventListener('click', () => {
+      this.resetToDefaultPose();
+    });
+  }
+
+  private setupIKChains(): void {
+    const boneController = this.renderer.getBoneController();
+    if (!boneController) {
+      this.showMessage('No model loaded', 'error');
+      return;
+    }
+
+    boneController.createCommonIKChains();
+    this.updateIKChainsList();
+    this.showMessage('IK chains created!', 'success');
+  }
+
+  private clearIKChains(): void {
+    const boneController = this.renderer.getBoneController();
+    if (boneController) {
+      boneController.clearIKChains();
+      this.updateIKChainsList();
+      this.showMessage('IK chains cleared', 'info');
+    }
+  }
+
+  private testIK(): void {
+    const boneController = this.renderer.getBoneController();
+    if (!boneController) {
+      this.showMessage('No model loaded', 'error');
+      return;
+    }
+
+    const chainNames = boneController.getIKChainNames();
+    if (chainNames.length === 0) {
+      this.showMessage('No IK chains found. Click "Setup IK Chains" first.', 'error');
+      return;
+    }
+
+    // Test with the first available chain (usually leftArm)
+    const testChain = chainNames[0];
+    
+    // Create a target position in front of the model
+    const targetPos = new THREE.Vector3(1, 1, 1);
+    
+    const success = boneController.solveIK(testChain, targetPos);
+    if (success) {
+      this.showMessage(`IK test successful for ${testChain}!`, 'success');
+    } else {
+      this.showMessage(`IK test failed for ${testChain}`, 'error');
+    }
+  }
+
+  private updateIKChainsList(): void {
+    const chainsList = document.getElementById('ik-chains-list');
+    if (!chainsList) return;
+
+    const boneController = this.renderer.getBoneController();
+    if (!boneController) {
+      chainsList.innerHTML = '<p class="no-chains">No model loaded</p>';
+      return;
+    }
+
+    const chainNames = boneController.getIKChainNames();
+    
+    if (chainNames.length === 0) {
+      chainsList.innerHTML = '<p class="no-chains">No IK chains created yet</p>';
+      return;
+    }
+
+    // Get the bones for each chain
+    const chainData = chainNames.map((chainName: string) => {
+      const bones = boneController.getIKChainBones(chainName);
+      return { chainName, bones };
+    });
+
+    chainsList.innerHTML = chainData.map(({ chainName, bones }: {chainName: string, bones: string[]}) => `
+      <div class="ik-chain-item">
+        <div class="ik-chain-header" onclick="toggleIKChainDetails('${chainName}')">
+          <span class="ik-chain-name">${chainName}</span>
+          <span class="ik-chain-toggle" id="toggle-${chainName}">▼</span>
+        </div>
+        <div class="ik-chain-details" id="details-${chainName}" style="display: none;">
+          <div class="ik-chain-bones">
+            <strong>Bones (${bones.length}):</strong>
+            <ul class="bone-list">
+              ${bones.map((bone: string) => `<li class="bone-item">${bone}</li>`).join('')}
+            </ul>
+          </div>
+          <div class="ik-chain-controls">
+            <button class="ik-chain-btn target" data-chain="${chainName}" title="Toggle target visibility">👁️ Target</button>
+            <button class="ik-chain-btn solve" data-chain="${chainName}" title="Test solve">🎯 Test</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    // Add event listeners for chain controls
+    chainsList.querySelectorAll('.ik-chain-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.target as HTMLButtonElement;
+        const chainName = button.getAttribute('data-chain');
+        if (!chainName) return;
+
+        if (button.classList.contains('target')) {
+          this.toggleIKTarget(chainName);
+        } else if (button.classList.contains('solve')) {
+          this.activateIKSolving(chainName);
+        }
+      });
+    });
+
+    // Add the toggle function to the global scope so onclick can access it
+    (window as any).toggleIKChainDetails = (chainName: string) => {
+      const details = document.getElementById(`details-${chainName}`);
+      const toggle = document.getElementById(`toggle-${chainName}`);
+      
+      if (details && toggle) {
+        const isHidden = details.style.display === 'none';
+        details.style.display = isHidden ? 'block' : 'none';
+        toggle.textContent = isHidden ? '▲' : '▼';
+      }
+    };
+  }
+
+  private toggleIKTarget(chainName: string): void {
+    const boneController = this.renderer.getBoneController();
+    if (!boneController) return;
+
+    // Toggle target visibility (this would need to be implemented in the bone controller)
+    // For now, just show a message
+    this.showMessage(`Toggle target for ${chainName}`, 'info');
+  }
+
+  private activateIKSolving(chainName: string): void {
+    this.activeIKChain = chainName;
+    this.ikMode = true;
+    this.showMessage(`Click in 3D space to solve IK for ${chainName}`, 'info');
+    
+    // Change cursor to indicate IK mode
+    this.canvasContainer.style.cursor = 'crosshair';
+  }
+
+  private handleIKClick(worldPosition: THREE.Vector3): void {
+    if (!this.ikMode || !this.activeIKChain) return;
+
+    const boneController = this.renderer.getBoneController();
+    if (!boneController) return;
+
+    const success = boneController.solveIK(this.activeIKChain, worldPosition);
+    if (success) {
+      this.showMessage(`IK solved for ${this.activeIKChain}!`, 'success');
+      // Add to undo history
+      const currentState = this.renderer.getBoneRotations();
+      this.undoRedoManager.saveState(
+        'ik-solve',
+        `IK solved for ${this.activeIKChain}`,
+        {}, // We don't have the before state here
+        { boneRotations: currentState }
+      );
+    } else {
+      this.showMessage(`IK solution failed for ${this.activeIKChain}`, 'error');
+    }
+
+    // Exit IK mode
+    this.ikMode = false;
+    this.activeIKChain = null;
+    this.canvasContainer.style.cursor = 'default';
+  }
+
+  private worldPositionFromMouse(mouseX: number, mouseY: number): THREE.Vector3 {
+    // Convert mouse coordinates to world position using camera-relative projection
+    const rect = this.canvasContainer.getBoundingClientRect();
+    const x = ((mouseX - rect.left) / rect.width) * 2 - 1;
+    const y = -((mouseY - rect.top) / rect.height) * 2 + 1;
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2(x, y);
+    raycaster.setFromCamera(mouse, this.renderer.getCamera());
+
+    // If we have an IK drag target, use its current position to define the projection plane
+    if (this.ikDragTarget) {
+      const currentTargetPos = this.ikDragTarget.control.position.clone();
+      const camera = this.renderer.getCamera();
+      
+      // Create a plane perpendicular to the camera direction passing through the target
+      const cameraDirection = new THREE.Vector3();
+      camera.getWorldDirection(cameraDirection);
+      const plane = new THREE.Plane(cameraDirection, -cameraDirection.dot(currentTargetPos));
+      
+      const intersection = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(plane, intersection)) {
+        return intersection;
+      }
+    }
+
+    // Fallback: cast against a plane at a reasonable distance from camera
+    const camera = this.renderer.getCamera();
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+    
+    // Use a plane 5 units away from camera in the direction it's looking
+    const planePoint = camera.position.clone().add(cameraDirection.multiplyScalar(5));
+    const plane = new THREE.Plane(cameraDirection, -cameraDirection.dot(planePoint));
+    
+    const intersection = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(plane, intersection)) {
+      return intersection;
+    }
+    
+    // Final fallback: use a point along the ray
+    return raycaster.ray.origin.clone().add(raycaster.ray.direction.multiplyScalar(5));
+  }
+
   private exportPoseAsJson(): any {
     const boneRotations = this.renderer.getBoneRotations();
     const modelSettings = this.renderer.getGLTFSettings();
@@ -1248,7 +2110,7 @@ class StickFigureApp3D {
       }
 
       // Save the current state
-      this.saveCurrentState();
+      this.saveCurrentStateImmediate();
 
       console.log('✅ Pose imported successfully from JSON');
     } catch (error) {
@@ -1279,12 +2141,89 @@ class StickFigureApp3D {
     } catch (error) {
       console.error('❌ Error getting model settings:', error);
     }
+    
+    // Test scene settings
+    try {
+      const sceneSettings = this.renderer.getSettings();
+      console.log('🎨 Current scene settings:', sceneSettings);
+    } catch (error) {
+      console.error('❌ Error getting scene settings:', error);
+    }
+    
+    // Test UI states
+    const panelStates = {
+      settingsExpanded: !document.getElementById('settings-content')?.classList.contains('collapsed'),
+      ikExpanded: !document.getElementById('ik-content')?.classList.contains('collapsed'),
+      undoRedoExpanded: !document.getElementById('undo-redo-content')?.classList.contains('collapsed')
+       };
+    console.log('📂 Current panel states:', panelStates);
+    
+    // Test default pose
+    console.log('🎭 Default pose available:', this.defaultPose ? Object.keys(this.defaultPose).length + ' bones' : 'None');
   }
 
   // Debug method to clear saved state
   public clearSavedState(): void {
     localStorage.removeItem('poser3d-app-state');
     console.log('🗑️ Cleared saved state');
+  }
+
+  private resetToDefaultPose(): void {
+    if (!this.defaultPose) {
+      this.showMessage('No default pose available. Load a model first.', 'warning');
+      return;
+    }
+
+    console.log('🔄 Resetting to default pose');
+    
+    // Save current state for undo
+    const beforeState = this.getCurrentState();
+    
+    // Apply the default pose
+    this.renderer.setBoneRotations(this.defaultPose);
+    
+    // Save action for undo/redo
+    this.saveAction('reset-to-default', 'Reset to Default Pose', beforeState);
+    
+    // Update selection UI if a joint is selected
+    if (this.selectedJoint) {
+      const bone = this.renderer.getBoneByName(this.selectedJoint);
+      if (bone) {
+        this.updateSelectionUI(bone);
+      }
+    }
+    
+    this.showMessage('Reset to default pose', 'success');
+    
+    // Save the current state after reset
+    this.saveCurrentStateImmediate();
+  }
+
+  private applySavedBoneDepthLimit(): void {
+    try {
+      const savedState = localStorage.getItem('poser3d-simple-state');
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        if (state.boneDepthLimit !== undefined) {
+          console.log('🔍 Applying saved bone depth limit:', state.boneDepthLimit);
+          this.renderer.setBoneDepthLimit(state.boneDepthLimit);
+          
+          // Update the UI slider
+          const boneDepthSlider = document.getElementById('bone-depth-limit') as HTMLInputElement;
+          if (boneDepthSlider) {
+            boneDepthSlider.value = state.boneDepthLimit.toString();
+            
+            // Update value display
+            const valueDisplay = boneDepthSlider.parentElement?.querySelector('.value-display');
+            if (valueDisplay) {
+              valueDisplay.textContent = state.boneDepthLimit.toString();
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Error applying saved bone depth limit:', error);
+    }
   }
 }
 

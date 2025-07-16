@@ -1,5 +1,4 @@
 import type { Character, AppState, SceneSettings, GLTFModelSettings } from './types';
-import * as THREE from 'three';
 
 export interface CameraState {
   position: { x: number; y: number; z: number };
@@ -212,7 +211,7 @@ export class BrowserStateManager {
       visible: char.visible,
       keypoints: this.deepCloneKeypoints(char.keypoints),
       modelPath: char.modelPath,
-      boneRotations: char.boneRotations ? this.deepCloneBoneRotations(char.boneRotations) : undefined
+      boneRotations: char.boneRotations ? this.deepCloneBoneRotationsFromPlain(char.boneRotations) : undefined
     }));
   }
 
@@ -228,10 +227,9 @@ export class BrowserStateManager {
     return cloned;
   }
 
-  private deepCloneBoneRotations(boneRotations: Record<string, THREE.Euler>): Record<string, any> {
-    const cloned: Record<string, any> = {};
+  private deepCloneBoneRotationsFromPlain(boneRotations: Record<string, { x: number; y: number; z: number; order: string }>): Record<string, { x: number; y: number; z: number; order: string }> {
+    const cloned: Record<string, { x: number; y: number; z: number; order: string }> = {};
     for (const [key, value] of Object.entries(boneRotations)) {
-      // Convert THREE.Euler to plain object for JSON serialization
       cloned[key] = {
         x: value.x,
         y: value.y,

@@ -36,8 +36,25 @@
           <div id="three-canvas"></div>
           <div class="controls-overlay">
             <div class="camera-info">
-              <small><strong>Camera:</strong> Left: Rotate | Middle: Pan | Right: Zoom</small><br>
-              <small><strong>Bone Movement:</strong> Default: Camera-relative | Shift: XZ | Ctrl: XY | Shift+Ctrl: YZ</small>
+              <small><strong>Camera:</strong> Left: Rotate | Middle: Pan | Right: Zoom</small>
+            </div>
+            <div class="rotation-hints">
+              <small><strong>Joint Rotation:</strong></small><br>
+              <small id="rotation-mode-none" class="rotation-mode-hint">
+                <span class="mode-key">None</span>: Camera-relative
+              </small><br>
+              <small id="rotation-mode-shift" class="rotation-mode-hint">
+                <span class="mode-key">Shift</span>: XZ Plane Lock
+              </small><br>
+              <small id="rotation-mode-ctrl" class="rotation-mode-hint">
+                <span class="mode-key">Ctrl</span>: XY Plane Lock
+              </small><br>
+              <small id="rotation-mode-shift-ctrl" class="rotation-mode-hint">
+                <span class="mode-key">Shift+Ctrl</span>: YZ Plane Lock
+              </small><br>
+              <small class="ik-hint">
+                <span class="mode-key">Alt</span>: Interactive IK Mode
+              </small>
             </div>
             <div id="plane-indicator" style="display: none;"></div>
           </div>
@@ -68,6 +85,21 @@
                   Z: <span id="rotation-z-compact">0.00°</span>
                 </span>
               </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Pose Commands Block -->
+        <div class="pose-commands-container">
+          <div class="pose-commands-block">
+            <div class="pose-commands-header">
+              <h4>🎭 Pose Commands</h4>
+            </div>
+            <div class="pose-commands-buttons">
+              <button id="reset-to-default-pose" class="pose-cmd-btn reset-pose">
+                <span class="btn-icon">🔄</span>
+                <span class="btn-text">Reset to Default</span>
+              </button>
             </div>
           </div>
         </div>
@@ -117,6 +149,23 @@
                   <input type="range" id="bone-depth-limit" min="0" max="10" step="1" value="3">
                   <span class="value-display">3</span>
                 </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="ik-panel">
+            <h3 class="collapsible-header" id="ik-header">
+              <span>Inverse Kinematics</span>
+              <span id="ik-toggle" class="collapse-toggle">▼</span>
+            </h3>
+            <div id="ik-content" class="collapsible-content">
+              <div class="ik-controls">
+                <button id="setup-ik-chains" class="ik-btn">🔗 Setup IK Chains</button>
+                <button id="clear-ik-chains" class="ik-btn">🗑️ Clear IK Chains</button>
+                <button id="test-ik" class="ik-btn">🧪 Test IK</button>
+              </div>
+              <div class="ik-chains-list" id="ik-chains-list">
+                <p class="no-chains">No IK chains created yet</p>
               </div>
             </div>
           </div>

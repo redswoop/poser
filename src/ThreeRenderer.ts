@@ -218,6 +218,45 @@ export class ThreeRenderer {
     console.log(`Movement plane set to: ${plane}`);
   }
 
+  public setIKMode(ikModeActive: boolean): void {
+    if (this.gltfRenderer.boneController) {
+      this.gltfRenderer.boneController.setIKMode(ikModeActive);
+    }
+  }
+
+  public raycastIKControls(mouseX: number, mouseY: number): { targetName: string; control: THREE.Object3D } | null {
+    if (!this.gltfRenderer.boneController) {
+      return null;
+    }
+
+    // Convert mouse coordinates to normalized device coordinates
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((mouseX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((mouseY - rect.top) / rect.height) * 2 + 1;
+
+    // Set up raycaster
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // Get all IK control objects that are visible
+    const ikControls = this.gltfRenderer.boneController.getIKControls();
+    const visibleControls = ikControls.filter(child => child.visible);
+    
+    // Raycast against IK controls
+    const intersects = this.raycaster.intersectObjects(visibleControls, false);
+
+    if (intersects.length > 0) {
+      // Get the closest intersection
+      const closestIntersect = intersects[0];
+      const control = closestIntersect.object;
+      const targetName = this.gltfRenderer.boneController.getTargetNameFromIKControl(control);
+      if (targetName) {
+        return { targetName, control };
+      }
+    }
+
+    return null;
+  }
+
   public screenToWorldMovement(deltaX: number, deltaY: number, distance: number): THREE.Vector3 {
     // Convert screen movement to world movement based on camera
     const factor = distance * 0.001;
@@ -391,6 +430,9 @@ export class ThreeRenderer {
     
     // Update orbit controls
     this.controls.update();
+    
+    // Update GLTF renderer to keep IK targets synchronized
+    this.gltfRenderer.update();
     
     this.renderer.render(this.scene, this.camera);
   }
