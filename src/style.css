@@ -728,18 +728,191 @@ header p {
   border-radius: 3px;
 }
 
-/* Responsive */
-@media (max-width: 1200px) {
-  .main-content {
-    grid-template-columns: 1fr;
-    grid-template-areas: 
-      "canvas"
-      "selection"
-      "controls";
+/* JSON Pose Editor Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.4em;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.json-editor-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.json-editor-controls button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.json-editor-controls button:first-child {
+  background: #28a745;
+  color: white;
+}
+
+.json-editor-controls button:first-child:hover {
+  background: #218838;
+}
+
+.json-editor-controls button:last-child {
+  background: #007bff;
+  color: white;
+}
+
+.json-editor-controls button:last-child:hover {
+  background: #0056b3;
+}
+
+.json-editor-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+#json-pose-textarea {
+  width: 100%;
+  height: 400px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 15px;
+  resize: none;
+  outline: none;
+  background: #f8f9fa;
+  color: #333;
+}
+
+#json-pose-textarea:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+.save-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.save-btn:hover {
+  background: #218838;
+}
+
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+  background: #5a6268;
+}
+
+/* Responsive modal */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 95%;
+    max-height: 95vh;
   }
   
-  .controls {
-    order: -1;
-    max-height: none;
+  .json-editor-controls {
+    flex-direction: column;
+  }
+  
+  #json-pose-textarea {
+    height: 300px;
+    font-size: 12px;
   }
 }

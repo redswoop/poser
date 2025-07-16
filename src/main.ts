@@ -130,6 +130,9 @@ class StickFigureApp3D {
       }
     });
 
+    // JSON Pose Editor Modal
+    this.setupJsonPoseEditor();
+
     // Mouse events for 3D bone control interaction
     this.setupMouseEventListeners();
 
@@ -1095,6 +1098,162 @@ class StickFigureApp3D {
       }
       
       console.log(`🔍 Updated bone depth slider: max=${maxDepth}, current=${currentDepth}`);
+    }
+  }
+
+  private setupJsonPoseEditor(): void {
+    const jsonPoseButton = document.getElementById('json-pose-editor');
+    const modal = document.getElementById('json-pose-modal');
+    const closeBtn = document.getElementById('close-json-modal');
+    const cancelBtn = document.getElementById('cancel-json-modal');
+    const exportCurrentBtn = document.getElementById('export-current-pose');
+    const importFromJsonBtn = document.getElementById('import-from-json');
+    const saveBtn = document.getElementById('save-json-pose');
+    const textarea = document.getElementById('json-pose-textarea') as HTMLTextAreaElement;
+
+    // Open modal
+    jsonPoseButton?.addEventListener('click', () => {
+      if (modal) {
+        modal.style.display = 'flex';
+        this.populateJsonTextarea();
+      }
+    });
+
+    // Close modal
+    const closeModal = () => {
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    };
+
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+
+    // Close modal when clicking outside
+    modal?.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    });
+
+    // Export current pose
+    exportCurrentBtn?.addEventListener('click', () => {
+      this.populateJsonTextarea();
+    });
+
+    // Import from JSON
+    importFromJsonBtn?.addEventListener('click', () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = '.json';
+      fileInput.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const jsonString = event.target?.result as string;
+            if (textarea) {
+              textarea.value = jsonString;
+            }
+          };
+          reader.readAsText(file);
+        }
+      };
+      fileInput.click();
+    });
+
+    // Save pose
+    saveBtn?.addEventListener('click', () => {
+      if (textarea) {
+        try {
+          const jsonData = JSON.parse(textarea.value);
+          this.importPoseFromJson(jsonData);
+          closeModal();
+          this.showMessage('Pose imported successfully!', 'success');
+        } catch (error) {
+          this.showMessage('Invalid JSON format', 'error');
+          console.error('JSON parse error:', error);
+        }
+      }
+    });
+
+    // Handle Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal?.style.display === 'flex') {
+        closeModal();
+      }
+    });
+  }
+
+  private populateJsonTextarea(): void {
+    const textarea = document.getElementById('json-pose-textarea') as HTMLTextAreaElement;
+    if (textarea) {
+      const poseData = this.exportPoseAsJson();
+      textarea.value = JSON.stringify(poseData, null, 2);
+    }
+  }
+
+  private exportPoseAsJson(): any {
+    const boneRotations = this.renderer.getBoneRotations();
+    const modelSettings = this.renderer.getGLTFSettings();
+    
+    return {
+      timestamp: new Date().toISOString(),
+      modelPath: this.currentModelPath,
+      modelSettings: modelSettings,
+      boneRotations: Object.fromEntries(
+        Object.entries(boneRotations).map(([name, euler]) => [
+          name,
+          {
+            x: euler.x,
+            y: euler.y,
+            z: euler.z,
+            order: euler.order
+          }
+        ])
+      ),
+      metadata: {
+        appVersion: '1.0.0',
+        boneCount: Object.keys(boneRotations).length,
+        description: 'Exported from 3D Character Poser'
+      }
+    };
+  }
+
+  private importPoseFromJson(jsonData: any): void {
+    try {
+      // Import model if different
+      if (jsonData.modelPath && jsonData.modelPath !== this.currentModelPath) {
+        this.loadModelFromPath(jsonData.modelPath, true);
+      }
+
+      // Import model settings
+      if (jsonData.modelSettings) {
+        this.renderer.updateGLTFSettings(jsonData.modelSettings);
+        this.currentModelSettings = jsonData.modelSettings;
+      }
+
+      // Import bone rotations
+      if (jsonData.boneRotations) {
+        const rotations: Record<string, THREE.Euler> = {};
+        Object.entries(jsonData.boneRotations).forEach(([name, rotData]: [string, any]) => {
+          rotations[name] = new THREE.Euler(
+            rotData.x,
+            rotData.y,
+            rotData.z,
+            rotData.order
+          );
+        });
+        this.renderer.setBoneRotations(rotations);
+      }
+
+      // Save the current state
+      this.saveCurrentState();
+
+      console.log('✅ Pose imported successfully from JSON');
+    } catch (error) {
+      console.error('❌ Error importing pose from JSON:', error);
+      throw error;
     }
   }
 

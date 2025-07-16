@@ -17,6 +17,7 @@
         <button id="reset-camera">🎥 Reset Camera</button>
         <button id="export-character">💾 Export Character</button>
         <button id="import-character">📂 Import Character</button>
+        <button id="json-pose-editor">📝 JSON Pose Editor</button>
         <input type="file" id="import-file" accept=".json" style="display: none;">
       </div>
       
@@ -137,6 +138,29 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- JSON Pose Editor Modal -->
+    <div id="json-pose-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📝 JSON Pose Editor</h3>
+          <button id="close-json-modal" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="json-editor-controls">
+            <button id="export-current-pose">📤 Export Current Pose</button>
+            <button id="import-from-json">📥 Import Pose</button>
+          </div>
+          <div class="json-editor-container">
+            <textarea id="json-pose-textarea" placeholder="JSON pose data will appear here..." spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="save-json-pose" class="save-btn">💾 Save Pose</button>
+          <button id="cancel-json-modal" class="cancel-btn">Cancel</button>
         </div>
       </div>
     </div>
