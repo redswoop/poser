@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State Test - Poser3D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        
+        .test-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #444;
+        }
+        
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #106ebe;
+        }
+        
+        .output {
+            background-color: #000;
+            color: #0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background-color: #0d7377;
+            color: #fff;
+        }
+        
+        .status.error {
+            background-color: #d32f2f;
+            color: #fff;
+        }
+        
+        .status.warning {
+            background-color: #f57c00;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>3D Poser State Testing</h1>
+    
+    <div class="test-panel">
+        <h2>Local Storage Test</h2>
+        <button onclick="testLocalStorage()">Test LocalStorage</button>
+        <button onclick="clearLocalStorage()">Clear LocalStorage</button>
+        <div id="localStorageOutput" class="output"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>State Saving Test</h2>
+        <button onclick="testStateSaving()">Test Save/Load</button>
+        <button onclick="manualSave()">Manual Save</button>
+        <button onclick="manualLoad()">Manual Load</button>
+        <div id="stateOutput" class="output"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>Instructions</h2>
+        <p>1. Open the main app at <a href="http://localhost:5173" target="_blank">http://localhost:5173</a></p>
+        <p>2. Load a character and pose it</p>
+        <p>3. Come back to this page and run the tests</p>
+        <p>4. Check the outputs below</p>
+    </div>
+
+    <script>
+        function log(message, outputId = 'stateOutput') {
+            const output = document.getElementById(outputId);
+            output.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function testLocalStorage() {
+            const output = document.getElementById('localStorageOutput');
+            output.textContent = '';
+            
+            try {
+                // Test basic localStorage functionality
+                localStorage.setItem('test-key', 'test-value');
+                const value = localStorage.getItem('test-key');
+                localStorage.removeItem('test-key');
+                
+                log('✅ LocalStorage is working', 'localStorageOutput');
+                log('Test value: ' + value, 'localStorageOutput');
+                
+                // Check for app-specific keys
+                const keys = Object.keys(localStorage);
+                log('All localStorage keys:', 'localStorageOutput');
+                keys.forEach(key => {
+                    log('  ' + key + ': ' + localStorage.getItem(key).substring(0, 100) + '...', 'localStorageOutput');
+                });
+                
+            } catch (error) {
+                log('❌ LocalStorage error: ' + error.message, 'localStorageOutput');
+            }
+        }
+
+        function clearLocalStorage() {
+            const output = document.getElementById('localStorageOutput');
+            output.textContent = '';
+            
+            try {
+                localStorage.clear();
+                log('✅ LocalStorage cleared', 'localStorageOutput');
+            } catch (error) {
+                log('❌ Error clearing localStorage: ' + error.message, 'localStorageOutput');
+            }
+        }
+
+        function testStateSaving() {
+            const output = document.getElementById('stateOutput');
+            output.textContent = '';
+            
+            try {
+                // Test saving simple state
+                const testState = {
+                    timestamp: new Date().toISOString(),
+                    test: 'Simple state test',
+                    boneRotations: {
+                        'test-bone': { x: 0.1, y: 0.2, z: 0.3 }
+                    }
+                };
+                
+                localStorage.setItem('poser3d-simple-state', JSON.stringify(testState));
+                log('✅ Test state saved', 'stateOutput');
+                
+                // Test loading
+                const loaded = JSON.parse(localStorage.getItem('poser3d-simple-state'));
+                log('✅ Test state loaded:', 'stateOutput');
+                log(JSON.stringify(loaded, null, 2), 'stateOutput');
+                
+            } catch (error) {
+                log('❌ State test error: ' + error.message, 'stateOutput');
+            }
+        }
+
+        function manualSave() {
+            const output = document.getElementById('stateOutput');
+            output.textContent = '';
+            
+            try {
+                const state = {
+                    timestamp: new Date().toISOString(),
+                    character: {
+                        modelPath: 'womenfemale_body_base_rigged.glb',
+                        scale: 1.0,
+                        boneRotations: {
+                            'mixamorig:Hips': { x: 0, y: 0, z: 0 },
+                            'mixamorig:Spine': { x: 0.1, y: 0, z: 0 },
+                            'mixamorig:RightArm': { x: 0, y: 0, z: 0.5 }
+                        }
+                    }
+                };
+                
+                localStorage.setItem('poser3d-simple-state', JSON.stringify(state));
+                log('✅ Manual state saved', 'stateOutput');
+                log('State: ' + JSON.stringify(state, null, 2), 'stateOutput');
+                
+            } catch (error) {
+                log('❌ Manual save error: ' + error.message, 'stateOutput');
+            }
+        }
+
+        function manualLoad() {
+            const output = document.getElementById('stateOutput');
+            output.textContent = '';
+            
+            try {
+                const saved = localStorage.getItem('poser3d-simple-state');
+                if (saved) {
+                    const state = JSON.parse(saved);
+                    log('✅ Manual state loaded:', 'stateOutput');
+                    log(JSON.stringify(state, null, 2), 'stateOutput');
+                } else {
+                    log('⚠️ No saved state found', 'stateOutput');
+                }
+                
+            } catch (error) {
+                log('❌ Manual load error: ' + error.message, 'stateOutput');
+            }
+        }
+    </script>
+</body>
+</html>

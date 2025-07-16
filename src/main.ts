@@ -1,170 +1,62 @@
 import './style.css';
 import * as THREE from 'three';
 import { ThreeRenderer } from './ThreeRenderer';
-import { BoneConstraintSolver } from './BoneConstraintSolver';
 import { UndoRedoManager } from './UndoRedoManager';
 import { BrowserStateManager } from './BrowserStateManager';
-import type { Character, Preset, SceneSettings, AppState } from './types';
+import type { SceneSettings, GLTFModelSettings } from './types';
 
 class StickFigureApp3D {
   private renderer!: ThreeRenderer;
-  private constraintSolver: BoneConstraintSolver;
   private undoRedoManager: UndoRedoManager;
   private stateManager: BrowserStateManager;
-  private characters: Character[] = [];
-  private selectedCharacter: Character | null = null;
-  private selectedJoint: string | null = null;
-  private nextCharacterId = 1;
   private isDragging = false;
-  private dragTarget: { character: Character; jointName: string } | null = null;
-  private dragStartState: AppState | null = null;
-  private hasShownSelectionHelp = false; // Track if we've shown the sticky selection help
+  private dragTarget: { bone: THREE.Bone; control: THREE.Object3D; originalRotation: THREE.Euler } | null = null;
+  private dragStartState: any = null;
+  private selectedJoint: string | null = null;
+  private currentModelPath: string | null = null;
+  private currentModelSettings: GLTFModelSettings | null = null;
 
   // UI Elements
   private canvasContainer: HTMLElement;
-  private charactersContainer: HTMLElement;
-  private keypointsContainer: HTMLElement;
-  private presetButtonsContainer: HTMLElement;
-
-  // Presets
-  private presets: Record<string, Preset> = {
-    standing: {
-      head: { x: 0, y: 4.5, z: 0 },
-      neck: { x: 0, y: 3.7, z: 0 },
-      leftShoulder: { x: -0.7, y: 3.7, z: 0 },
-      rightShoulder: { x: 0.7, y: 3.7, z: 0 },
-      leftElbow: { x: -1, y: 2.5, z: 0.3 },
-      leftWrist: { x: -1.2, y: 1.4, z: 0.5 },
-      rightElbow: { x: 1, y: 2.5, z: 0.3 },
-      rightWrist: { x: 1.2, y: 1.4, z: 0.5 },
-      spine: { x: 0, y: 2.3, z: 0 },
-      leftHip: { x: -0.5, y: 2.3, z: 0 },
-      rightHip: { x: 0.5, y: 2.3, z: 0 },
-      leftKnee: { x: -0.5, y: 0.7, z: 0 },
-      leftAnkle: { x: -0.5, y: -0.9, z: 0 },
-      rightKnee: { x: 0.5, y: 0.7, z: 0 },
-      rightAnkle: { x: 0.5, y: -0.9, z: 0 }
-    },
-    walking: {
-      head: { x: 0, y: 4.5, z: 0 },
-      neck: { x: 0, y: 3.7, z: 0 },
-      leftShoulder: { x: -0.7, y: 3.7, z: 0 },
-      rightShoulder: { x: 0.7, y: 3.7, z: 0 },
-      leftElbow: { x: -0.5, y: 2.5, z: 0.8 },
-      leftWrist: { x: -0.3, y: 1.4, z: 1.2 },
-      rightElbow: { x: 1.5, y: 2.5, z: -0.8 },
-      rightWrist: { x: 1.7, y: 1.4, z: -1.2 },
-      spine: { x: 0, y: 2.3, z: 0 },
-      leftHip: { x: -0.5, y: 2.3, z: 0 },
-      rightHip: { x: 0.5, y: 2.3, z: 0 },
-      leftKnee: { x: -0.3, y: 0.7, z: 0.8 },
-      leftAnkle: { x: -0.1, y: -0.9, z: 1.2 },
-      rightKnee: { x: 0.7, y: 0.7, z: -0.8 },
-      rightAnkle: { x: 0.9, y: -0.9, z: -1.2 }
-    },
-    tPose: {
-      head: { x: 0, y: 4.5, z: 0 },
-      neck: { x: 0, y: 3.7, z: 0 },
-      leftShoulder: { x: -0.7, y: 3.7, z: 0 },
-      rightShoulder: { x: 0.7, y: 3.7, z: 0 },
-      leftElbow: { x: -1.9, y: 3.7, z: 0 },
-      leftWrist: { x: -3.1, y: 3.7, z: 0 },
-      rightElbow: { x: 1.9, y: 3.7, z: 0 },
-      rightWrist: { x: 3.1, y: 3.7, z: 0 },
-      spine: { x: 0, y: 2.3, z: 0 },
-      leftHip: { x: -0.5, y: 2.3, z: 0 },
-      rightHip: { x: 0.5, y: 2.3, z: 0 },
-      leftKnee: { x: -0.5, y: 0.7, z: 0 },
-      leftAnkle: { x: -0.5, y: -0.9, z: 0 },
-      rightKnee: { x: 0.5, y: 0.7, z: 0 },
-      rightAnkle: { x: 0.5, y: -0.9, z: 0 }
-    },
-    running: {
-      head: { x: 0.2, y: 4.3, z: 0 },
-      neck: { x: 0.2, y: 3.5, z: 0 },
-      leftShoulder: { x: -0.5, y: 3.5, z: 0 },
-      rightShoulder: { x: 0.9, y: 3.5, z: 0 },
-      leftElbow: { x: -0.8, y: 2.5, z: 1.2 },
-      leftWrist: { x: -1.2, y: 1.5, z: 1.8 },
-      rightElbow: { x: 1.8, y: 2.3, z: -1.5 },
-      rightWrist: { x: 2.2, y: 1.2, z: -2.0 },
-      spine: { x: 0.2, y: 2.1, z: 0 },
-      leftHip: { x: -0.3, y: 2.1, z: 0 },
-      rightHip: { x: 0.7, y: 2.1, z: 0 },
-      leftKnee: { x: -0.1, y: 1.5, z: 1.5 },
-      leftAnkle: { x: 0.1, y: -0.5, z: 2.2 },
-      rightKnee: { x: 0.9, y: 0.2, z: -1.2 },
-      rightAnkle: { x: 1.1, y: -0.9, z: -1.8 }
-    },
-    jumping: {
-      head: { x: 0, y: 5.2, z: 0 },
-      neck: { x: 0, y: 4.4, z: 0 },
-      leftShoulder: { x: -0.7, y: 4.4, z: 0 },
-      rightShoulder: { x: 0.7, y: 4.4, z: 0 },
-      leftElbow: { x: -1.5, y: 4.8, z: 0.5 },
-      leftWrist: { x: -2.0, y: 5.2, z: 0.8 },
-      rightElbow: { x: 1.5, y: 4.8, z: 0.5 },
-      rightWrist: { x: 2.0, y: 5.2, z: 0.8 },
-      spine: { x: 0, y: 3.0, z: 0 },
-      leftHip: { x: -0.5, y: 3.0, z: 0 },
-      rightHip: { x: 0.5, y: 3.0, z: 0 },
-      leftKnee: { x: -0.8, y: 2.2, z: 0.8 },
-      leftAnkle: { x: -1.0, y: 1.5, z: 1.2 },
-      rightKnee: { x: 0.8, y: 2.2, z: 0.8 },
-      rightAnkle: { x: 1.0, y: 1.5, z: 1.2 }
-    },
-    sitting: {
-      head: { x: 0, y: 4.5, z: 0 },
-      neck: { x: 0, y: 3.7, z: 0 },
-      leftShoulder: { x: -0.7, y: 3.7, z: 0 },
-      rightShoulder: { x: 0.7, y: 3.7, z: 0 },
-      leftElbow: { x: -1.2, y: 2.8, z: 0.8 },
-      leftWrist: { x: -1.5, y: 2.0, z: 1.2 },
-      rightElbow: { x: 1.2, y: 2.8, z: 0.8 },
-      rightWrist: { x: 1.5, y: 2.0, z: 1.2 },
-      spine: { x: 0, y: 2.3, z: 0 },
-      leftHip: { x: -0.5, y: 2.3, z: 0 },
-      rightHip: { x: 0.5, y: 2.3, z: 0 },
-      leftKnee: { x: -0.5, y: 2.0, z: 1.6 },
-      leftAnkle: { x: -0.5, y: 1.5, z: 2.5 },
-      rightKnee: { x: 0.5, y: 2.0, z: 1.6 },
-      rightAnkle: { x: 0.5, y: 1.5, z: 2.5 }
-    }
-  };
+  private compactSelectionBox: HTMLElement | null = null;
 
   constructor() {
-    this.constraintSolver = new BoneConstraintSolver();
     this.undoRedoManager = new UndoRedoManager();
     this.stateManager = new BrowserStateManager();
     
     // Get UI elements
     this.canvasContainer = document.getElementById('three-canvas')!;
-    this.charactersContainer = document.getElementById('characters-container')!;
-    this.keypointsContainer = document.getElementById('keypoints-container')!;
-    this.presetButtonsContainer = document.getElementById('preset-buttons-container')!;
 
     this.initializeRenderer();
     this.setupEventListeners();
     this.setupUI();
     this.setupAutoSave();
     
-    // Try to restore saved state before adding initial character
-    this.restoreFromBrowserState();
+    // Debug: Check if there's already saved state
+    const existingState = localStorage.getItem('poser3d-app-state');
+    console.log('🔍 Initial state check:', existingState ? JSON.parse(existingState) : 'No saved state found');
+    
+    // Load saved state before auto-loading default model
+    this.loadSavedState().then(() => {
+      // Auto-load the default GLB model if no saved state or model
+      setTimeout(() => {
+        if (!this.currentModelPath) {
+          console.log('🎭 No saved model found, loading default model');
+          this.loadDefaultModel();
+        } else {
+          console.log('🎯 Saved model found, skipping default model load');
+        }
+      }, 100);
+    });
   }
 
   private initializeRenderer(): void {
     this.renderer = new ThreeRenderer(this.canvasContainer);
-    
-    // Set initial movement plane
     this.renderer.setMovementPlane('camera-relative');
   }
 
   private setupEventListeners(): void {
     // Toolbar buttons
-    document.getElementById('add-character')?.addEventListener('click', () => this.addCharacter());
-    document.getElementById('clear-all')?.addEventListener('click', () => this.clearAll());
-    document.getElementById('export-json')?.addEventListener('click', () => this.exportJSON());
-    document.getElementById('import-json')?.addEventListener('click', () => this.importJSON());
     document.getElementById('reset-camera')?.addEventListener('click', () => this.renderer.resetCamera());
 
     // Undo/Redo buttons
@@ -173,13 +65,18 @@ class StickFigureApp3D {
 
     // Keyboard shortcuts for undo/redo
     document.addEventListener('keydown', (e) => {
-      // Handle undo/redo keyboard shortcuts
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         this.undo();
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault();
         this.redo();
+      } else if (e.key === 't' || e.key === 'T') {
+        this.testStateSaving();
+      } else if (e.key === 's' || e.key === 'S') {
+        this.saveCurrentState();
+      } else if (e.key === 'l' || e.key === 'L') {
+        this.loadSavedState();
       }
     });
 
@@ -191,31 +88,65 @@ class StickFigureApp3D {
     document.getElementById('view-top')?.addEventListener('click', () => this.renderer.setCameraView('top'));
     document.getElementById('view-bottom')?.addEventListener('click', () => this.renderer.setCameraView('bottom'));
 
-    // File input
-    document.getElementById('file-input')?.addEventListener('change', (e) => this.handleFileImport(e));
-
-    // Preset buttons
-    this.presetButtonsContainer.addEventListener('click', (e) => {
-      const button = e.target as HTMLButtonElement;
-      if (button.classList.contains('preset-btn')) {
-        const presetName = button.dataset.preset!;
-        this.applyPreset(presetName);
-      }
-    });
-
     // Settings
     this.setupSettingsEventListeners();
 
-    // Mouse events for 3D interaction
+    // Export/Import character state
+    const exportButton = document.getElementById('export-character');
+    const importButton = document.getElementById('import-character');
+    const importFileInput = document.getElementById('import-file') as HTMLInputElement;
+    
+    exportButton?.addEventListener('click', () => {
+      const characterState = this.exportCharacterState();
+      
+      // Create a downloadable file
+      const blob = new Blob([characterState], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `character-pose-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      this.showMessage('Character state exported successfully', 'success');
+    });
+    
+    importButton?.addEventListener('click', () => {
+      importFileInput.click();
+    });
+    
+    importFileInput?.addEventListener('change', (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const jsonString = e.target?.result as string;
+          this.importCharacterState(jsonString);
+        };
+        reader.readAsText(file);
+        
+        // Reset the file input
+        (event.target as HTMLInputElement).value = '';
+      }
+    });
+
+    // Mouse events for 3D bone control interaction
     this.setupMouseEventListeners();
 
     // Collapsible panels
     this.setupCollapsiblePanels();
+
+    // Set up GLTF controls event listener
+    window.addEventListener('gltfControlsReady', (event: Event) => {
+      console.log('🎮 GLTF bone controls are ready');
+      const customEvent = event as CustomEvent;
+      this.setupBoneControlInteraction(customEvent.detail.controls);
+    });
   }
 
   private setupMouseEventListeners(): void {
     let mouseDownPos = { x: 0, y: 0 };
-    let movementMode = 'camera-relative'; // Default to camera-relative movement
+    let movementMode = 'camera-relative';
 
     // Track keyboard state for movement mode switching
     let shiftPressed = false;
@@ -225,7 +156,6 @@ class StickFigureApp3D {
       if (e.key === 'Shift') shiftPressed = true;
       if (e.key === 'Control') ctrlPressed = true;
       
-      // Add Escape key to manually clear selection (since we made it sticky)
       if (e.key === 'Escape') {
         this.clearSelection();
         return;
@@ -233,13 +163,13 @@ class StickFigureApp3D {
       
       // Update movement mode based on modifier keys
       if (shiftPressed && ctrlPressed) {
-        movementMode = 'yz'; // Shift+Ctrl: move in YZ plane (side view)
+        movementMode = 'yz';
       } else if (shiftPressed) {
-        movementMode = 'xz'; // Shift: move in XZ plane (top-down view)
+        movementMode = 'xz';
       } else if (ctrlPressed) {
-        movementMode = 'xy'; // Ctrl: move in XY plane (front view)
+        movementMode = 'xy';
       } else {
-        movementMode = 'camera-relative'; // Default: camera-relative movement
+        movementMode = 'camera-relative';
       }
       
       this.updatePlaneIndicator(movementMode);
@@ -267,131 +197,109 @@ class StickFigureApp3D {
     this.canvasContainer.addEventListener('mousedown', (e) => {
       mouseDownPos = { x: e.clientX, y: e.clientY };
       
-      const raycastResult = this.renderer.raycastJoints(e.clientX, e.clientY);
+      console.log(`🖱️ Mouse down at: ${e.clientX}, ${e.clientY}`);
+      console.log(`🖱️ Bone control mode: ${this.renderer.boneControlMode}`);
       
-      if (raycastResult) {
-        // Find the actual character object from our array
-        const character = this.characters.find(c => c.id === raycastResult.character.id);
+      // Check for bone control interaction
+      const boneControlResult = this.renderer.raycastBoneControls(e.clientX, e.clientY);
+      
+      if (boneControlResult) {
+        console.log(`🎯 Selected bone: ${boneControlResult.bone.name}`);
         
-        if (character) {
-          // Save state for undo before starting drag (will be used when drag ends)
-          this.dragStartState = this.getCurrentState();
-          
-          // Select the joint first
-          this.selectJoint(character, raycastResult.jointName);
-          
-          this.isDragging = true;
-          this.dragTarget = {
-            character: character,
-            jointName: raycastResult.jointName
-          };
-          
-          // Set selected character WITHOUT auto-selecting head
-          this.selectedCharacter = character;
-          this.updateCharactersList();
-          
-          // Disable orbit controls while dragging
-          this.renderer.getControls().enabled = false;
-          e.preventDefault();
-          e.stopPropagation();
-          
-          // Show plane indicator
-          this.updatePlaneIndicator(movementMode);
-          this.renderer.setMovementPlane(movementMode);
-        }
+        // Save state for undo before starting drag
+        this.dragStartState = this.getCurrentState();
+        
+        this.isDragging = true;
+        this.dragTarget = {
+          bone: boneControlResult.bone,
+          control: boneControlResult.control,
+          originalRotation: boneControlResult.bone.rotation.clone()
+        };
+        
+        // Disable orbit controls while dragging
+        this.renderer.getControls().enabled = false;
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Show plane indicator
+        this.updatePlaneIndicator(movementMode);
+        this.renderer.setMovementPlane(movementMode);
+        
+        return;
       }
-      // Removed: Don't clear selection when clicking empty space - keep selection sticky
     });
 
-    // Add click handler for selection without dragging (useful for just seeing movement axes)
     this.canvasContainer.addEventListener('click', (e) => {
       if (!this.isDragging) {
-        const raycastResult = this.renderer.raycastJoints(e.clientX, e.clientY);
+        const boneControlResult = this.renderer.raycastBoneControls(e.clientX, e.clientY);
         
-        if (raycastResult) {
-          const character = this.characters.find(c => c.id === raycastResult.character.id);
-          if (character) {
-            this.selectJoint(character, raycastResult.jointName);
-          }
+        if (boneControlResult) {
+          console.log(`🎯 Clicked bone: ${boneControlResult.bone.name}`);
+          this.selectJoint(boneControlResult.bone);
+          return;
+        } else {
+          // Click on empty space, clear selection
+          this.clearSelection();
         }
-        // Removed: Don't clear selection when clicking empty space - keep selection sticky
       }
     });
 
     this.canvasContainer.addEventListener('mousemove', (e) => {
       if (this.isDragging && this.dragTarget) {
-        // Calculate mouse movement delta
         const deltaX = e.clientX - mouseDownPos.x;
         const deltaY = e.clientY - mouseDownPos.y;
         
-        // Calculate world space movement based on movement mode
-        let deltaWorld = { x: 0, y: 0, z: 0 };
+        // Handle bone control rotation
+        const rotationSensitivity = 0.01;
+        let deltaRotation = { x: 0, y: 0, z: 0 };
         
-        if (movementMode === 'camera-relative') {
-          // Use camera-relative movement (default)
-          const joint = this.dragTarget.character.keypoints[this.dragTarget.jointName];
-          if (joint) {
-            // Calculate distance from camera for proper scaling
-            const camera = this.renderer.getCamera();
-            const jointPos = new THREE.Vector3(joint.x, joint.y, joint.z);
-            const distance = camera.position.distanceTo(jointPos);
-            
-            // Get camera-relative movement
-            const movement = this.renderer.screenToWorldMovement(deltaX, deltaY, distance);
-            deltaWorld = {
-              x: movement.x,
-              y: movement.y,
-              z: movement.z
+        switch (movementMode) {
+          case 'camera-relative':
+            // For camera-relative, convert mouse movement to rotation around appropriate axes
+            deltaRotation = {
+              x: -deltaY * rotationSensitivity, // Mouse up/down -> rotate around X axis
+              y: deltaX * rotationSensitivity,  // Mouse left/right -> rotate around Y axis
+              z: 0
             };
-          }
-        } else {
-          // Use fixed plane movement with better scaling
-          const scaleFactor = 0.02;
-          
-          switch (movementMode) {
-            case 'xy': // Front view - X horizontal, Y vertical
-              deltaWorld = {
-                x: deltaX * scaleFactor,
-                y: -deltaY * scaleFactor, // Invert Y for correct direction
-                z: 0
-              };
-              break;
-            case 'xz': // Top view - X horizontal, Z depth
-              deltaWorld = {
-                x: deltaX * scaleFactor,
-                y: 0,
-                z: deltaY * scaleFactor
-              };
-              break;
-            case 'yz': // Side view - Y vertical, Z depth
-              deltaWorld = {
-                x: 0,
-                y: -deltaY * scaleFactor, // Invert Y for correct direction
-                z: deltaX * scaleFactor
-              };
-              break;
-          }
+            break;
+          case 'xy':
+            deltaRotation = {
+              x: -deltaY * rotationSensitivity,
+              y: deltaX * rotationSensitivity,
+              z: 0
+            };
+            break;
+          case 'xz':
+            deltaRotation = {
+              x: 0,
+              y: deltaX * rotationSensitivity,
+              z: deltaY * rotationSensitivity
+            };
+            break;
+          case 'yz':
+            deltaRotation = {
+              x: -deltaY * rotationSensitivity,
+              y: 0,
+              z: deltaX * rotationSensitivity
+            };
+            break;
         }
-
-        // Update joint position
-        const joint = this.dragTarget.character.keypoints[this.dragTarget.jointName];
-        if (joint) {
-          const newPosition = {
-            x: joint.x + deltaWorld.x,
-            y: joint.y + deltaWorld.y,
-            z: joint.z + deltaWorld.z
-          };
-
-          // Apply constraints
-          this.constraintSolver.applyConstraints(this.dragTarget.character, this.dragTarget.jointName, newPosition);
-          
-          // Update visuals
-          this.renderer.updateCharacter(this.dragTarget.character);
-          this.updateKeypointsUI();
-          
-          // Update mouse position for next delta calculation
-          mouseDownPos = { x: e.clientX, y: e.clientY };
+        
+        // Apply rotation to bone
+        this.dragTarget.bone.rotation.x += deltaRotation.x;
+        this.dragTarget.bone.rotation.y += deltaRotation.y;
+        this.dragTarget.bone.rotation.z += deltaRotation.z;
+        
+        // Update bone controller
+        this.renderer.updateBoneController();
+        
+        // Update selection UI if a joint is selected
+        if (this.selectedJoint && this.dragTarget && this.dragTarget.bone.name === this.selectedJoint) {
+          this.updateSelectionUI(this.dragTarget.bone);
         }
+        
+        // Update mouse position for next delta calculation
+        mouseDownPos = { x: e.clientX, y: e.clientY };
       }
     });
 
@@ -402,26 +310,15 @@ class StickFigureApp3D {
         
         // Save action to history if we actually dragged something
         if (this.dragStartState && this.dragTarget) {
-          const jointDisplayName = this.dragTarget.jointName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+          const boneName = this.dragTarget.bone.name || 'Unknown Bone';
+          console.log(`=== SAVING BONE MOVEMENT ===`);
+          console.log(`Bone: ${boneName}`);
           
-          // Add debugging for joint movement
-          console.log(`=== SAVING JOINT MOVEMENT ===`);
-          console.log(`Joint: ${jointDisplayName} on Character ${this.dragTarget.character.id}`);
-          console.log('Before state characters:', this.dragStartState.characters.map(c => ({ 
-            id: c.id, 
-            name: c.name,
-            headPos: c.keypoints.head 
-          })));
+          this.saveAction('bone-move', `Moved ${boneName}`, this.dragStartState);
+          console.log(`=== END BONE MOVEMENT SAVE ===`);
           
-          const currentState = this.getCurrentState();
-          console.log('After state characters:', currentState.characters.map(c => ({ 
-            id: c.id, 
-            name: c.name,
-            headPos: c.keypoints.head 
-          })));
-          
-          this.saveAction('joint-move', `Moved ${jointDisplayName}`, this.dragStartState);
-          console.log(`=== END JOINT MOVEMENT SAVE ===`);
+          // Save the current state after bone movement
+          this.saveCurrentState();
         }
       }
       this.isDragging = false;
@@ -432,42 +329,111 @@ class StickFigureApp3D {
   }
 
   private setupSettingsEventListeners(): void {
-    const boneThicknessSlider = document.getElementById('bone-thickness') as HTMLInputElement;
-    const jointSizeSlider = document.getElementById('joint-size') as HTMLInputElement;
     const gridVisibleCheckbox = document.getElementById('grid-visible') as HTMLInputElement;
-
-    boneThicknessSlider?.addEventListener('input', () => {
-      const settings: Partial<SceneSettings> = {
-        boneThickness: parseFloat(boneThicknessSlider.value)
-      };
-      this.renderer.updateSettings(settings);
-      // Re-render all characters to apply new bone thickness
-      this.characters.forEach(char => this.renderer.updateCharacter(char));
-    });
-
-    jointSizeSlider?.addEventListener('input', () => {
-      const settings: Partial<SceneSettings> = {
-        jointSize: parseFloat(jointSizeSlider.value)
-      };
-      this.renderer.updateSettings(settings);
-      // Re-render all characters to apply new joint size
-      this.characters.forEach(char => this.renderer.updateCharacter(char));
-    });
-
+    
     gridVisibleCheckbox?.addEventListener('change', () => {
       const settings: Partial<SceneSettings> = {
         gridVisible: gridVisibleCheckbox.checked
       };
       this.renderer.updateSettings(settings);
+      
+      // Save state after UI change
+      this.saveCurrentState();
+    });
+
+    // glTF model controls
+    const gltfFileInput = document.getElementById('gltf-file') as HTMLInputElement;
+    const modelOpacitySlider = document.getElementById('model-opacity') as HTMLInputElement;
+    const modelScaleSlider = document.getElementById('model-scale') as HTMLInputElement;
+    const showGltfModelCheckbox = document.getElementById('show-gltf-model') as HTMLInputElement;
+
+    gltfFileInput?.addEventListener('change', async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const url = URL.createObjectURL(file);
+        try {
+          await this.loadModelFromPath(url);
+          this.showMessage(`Loaded 3D model: ${file.name}`, 'success');
+          
+          // Save the state after loading a new model
+          this.saveCurrentState();
+        } catch (error) {
+          this.showMessage(`Error loading model: ${error}`, 'error');
+        }
+      }
+    });
+
+    modelOpacitySlider?.addEventListener('input', () => {
+      console.log('🎛️ Model opacity slider changed');
+      const settings = {
+        modelOpacity: parseFloat(modelOpacitySlider.value)
+      };
+      this.renderer.updateGLTFSettings(settings);
+      
+      // Update current model settings
+      this.currentModelSettings = this.renderer.getGLTFSettings();
+      
+      // Update value display
+      const valueDisplay = modelOpacitySlider.parentElement?.querySelector('.value-display');
+      if (valueDisplay) {
+        valueDisplay.textContent = parseFloat(modelOpacitySlider.value).toFixed(1);
+      }
+      
+      // Save state after UI change
+      console.log('🔄 Triggering save after opacity change');
+      this.saveCurrentState();
+    });
+
+    modelScaleSlider?.addEventListener('input', () => {
+      const settings = {
+        modelScale: parseFloat(modelScaleSlider.value)
+      };
+      this.renderer.updateGLTFSettings(settings);
+      
+      // Update current model settings
+      this.currentModelSettings = this.renderer.getGLTFSettings();
+      
+      // Update value display
+      const valueDisplay = modelScaleSlider.parentElement?.querySelector('.value-display');
+      if (valueDisplay) {
+        valueDisplay.textContent = parseFloat(modelScaleSlider.value).toFixed(1);
+      }
+      
+      // Save state after UI change
+      this.saveCurrentState();
+    });
+
+    // Bone depth limit slider
+    const boneDepthSlider = document.getElementById('bone-depth-limit') as HTMLInputElement;
+    boneDepthSlider?.addEventListener('input', () => {
+      const depthLimit = parseInt(boneDepthSlider.value);
+      this.renderer.setBoneDepthLimit(depthLimit);
+      
+      // Update value display
+      const valueDisplay = boneDepthSlider.parentElement?.querySelector('.value-display');
+      if (valueDisplay) {
+        valueDisplay.textContent = depthLimit.toString();
+      }
+      
+      console.log(`🔍 Bone depth limit set to: ${depthLimit}`);
+      
+      // Save state after UI change
+      this.saveCurrentState();
+    });
+
+    showGltfModelCheckbox?.addEventListener('change', () => {
+      this.renderer.setGLTFVisible(showGltfModelCheckbox.checked);
+      
+      // Update current model settings
+      this.currentModelSettings = this.renderer.getGLTFSettings();
+      
+      // Save state after UI change
+      this.saveCurrentState();
     });
   }
 
   private setupCollapsiblePanels(): void {
-    // Setup collapsible functionality for all sidebar panels
     const panels = [
-      { toggle: 'presets-toggle', container: 'preset-buttons-container' },
-      { toggle: 'characters-toggle', container: 'characters-container' },
-      { toggle: 'keypoints-toggle', container: 'keypoints-container' },
       { toggle: 'settings-toggle', container: 'settings-content' },
       { toggle: 'undo-redo-toggle', container: 'undo-redo-content' }
     ];
@@ -484,597 +450,268 @@ class StickFigureApp3D {
   }
 
   private setupUI(): void {
-    this.updateCharactersList();
-    this.updateKeypointsUI();
     this.updateUndoRedoUI();
+    this.initializeSelectionPanel();
   }
 
-  private addCharacter(): void {
-    // Save state for undo
-    const beforeState = this.getCurrentState();
+  private initializeSelectionPanel(): void {
+    this.compactSelectionBox = document.getElementById('compact-selection-box');
     
-    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dda0dd', '#98d8c8'];
-    const color = colors[this.characters.length % colors.length];
-    
-    const character: Character = {
-      id: this.nextCharacterId++,
-      name: `Character ${this.nextCharacterId - 1}`, // Use the actual ID for naming
-      color,
-      visible: true,
-      keypoints: this.deepCloneKeypoints(this.presets.standing) // Use deep clone instead of spread
-    };
-
-    // Position new characters with slight offset
-    const offset = this.characters.length * 2;
-    Object.keys(character.keypoints).forEach(jointName => {
-      character.keypoints[jointName].x += offset;
+    // Set up reset joint button
+    document.getElementById('reset-joint-btn-compact')?.addEventListener('click', () => {
+      this.resetSelectedJoint();
     });
-
-    this.characters.push(character);
-    this.constraintSolver.calculateBoneLengthsFromCharacter(character);
-    this.renderer.addCharacter(character);
-    this.selectCharacter(character);
-    this.updateCharactersList();
-    
-    // Save action to history
-    this.saveAction('character-add', `Added ${character.name}`, beforeState);
-    
-    this.showMessage('Character added!', 'success');
-    this.stateManager.markDirty();
-    
-    console.log(`Added character with ID ${character.id}. Total characters: ${this.characters.length}`);
   }
 
-  private clearAll(): void {
-    // Save state for undo
-    const beforeState = this.getCurrentState();
+  private async loadDefaultModel(): Promise<void> {
+    const defaultModelPath = '/womenfemale_body_base_rigged.glb';
     
-    this.renderer.clearJointHighlight(); // Clear any joint highlights
-    
-    this.characters.forEach(char => this.renderer.removeCharacter(char));
-    this.characters = [];
-    this.selectedCharacter = null;
-    this.selectedJoint = null;
-    this.updateCharactersList();
-    this.updateKeypointsUI();
-    
-    // Save action to history
-    this.saveAction('clear-all', 'Cleared all characters', beforeState);
-    
-    this.showMessage('All characters cleared!', 'info');
-    this.stateManager.markDirty();
-  }
-
-  private selectCharacter(character: Character): void {
-    this.selectedCharacter = character;
-    
-    // Also select the head joint by default for immediate visual feedback
-    this.selectJoint(character, 'head');
-    
-    this.updateCharactersList();
-    this.updateKeypointsUI();
-    this.stateManager.markDirty();
-  }
-
-  private selectJoint(character: Character, jointName: string): void {
-    // Clear any previous highlight first
-    this.renderer.clearJointHighlight();
-    
-    this.selectedCharacter = character;
-    this.selectedJoint = jointName;
-    
-    console.log(`Selected joint: ${jointName} on character ${character.id}`);
-    
-    // Show helpful message on first selection
-    if (!this.hasShownSelectionHelp) {
-      this.showMessage('Joint selected! Selection is sticky - press Escape to clear, or select another joint.', 'info');
-      this.hasShownSelectionHelp = true;
+    try {
+      console.log('🎭 Loading default GLB model...');
+      await this.loadModelFromPath(defaultModelPath);
+      
+      // Focus the camera on the loaded model
+      console.log('📷 Focusing camera on loaded GLB model...');
+      this.renderer.focusOnGLTFModel();
+      
+      console.log('✅ Default GLB model loaded successfully');
+      this.showMessage('Default character model loaded automatically', 'success');
+      
+      // Save the state after loading the default model
+      this.saveCurrentState();
+      
+    } catch (error) {
+      console.warn('⚠️ Could not load default GLB model:', error);
+      console.log('ℹ️ Continuing without default model - you can load one manually');
     }
-    
-    // Update visual indicators
-    this.updateJointSelectionVisual(character, jointName);
-    this.showMovementAxisIndicator(character, jointName);
-    this.stateManager.markDirty();
   }
 
-  private updateJointSelectionVisual(character: Character, jointName: string): void {
-    // Add visual highlight to selected joint through renderer
-    this.renderer.highlightJoint(character.id, jointName);
+  private setupBoneControlInteraction(_controls: THREE.Group): void {
+    console.log('🎮 Setting up bone control interaction');
+    // The bone controls are already handled by the mouse event listeners
+    // This method can be used for any additional setup if needed
   }
 
-  private showMovementAxisIndicator(_character: Character, jointName: string): void {
-    // Remove existing indicator
-    const existingIndicator = document.getElementById('movement-axis-indicator');
-    if (existingIndicator) {
-      existingIndicator.remove();
-    }
-
-    // Create movement axis indicator
-    const indicator = document.createElement('div');
-    indicator.id = 'movement-axis-indicator';
-    indicator.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      background: rgba(0,0,0,0.9);
-      color: white;
-      padding: 15px 20px;
-      border-radius: 10px;
-      font-family: 'Monaco', 'Menlo', monospace;
-      font-size: 12px;
-      z-index: 1000;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-      border: 2px solid #00ff88;
-      max-width: 300px;
-      line-height: 1.4;
-    `;
+  private selectJoint(bone: THREE.Bone): void {
+    console.log(`🎯 Selecting joint: ${bone.name}`);
+    this.selectedJoint = bone.name;
+    this.updateSelectionUI(bone);
+    this.showSelectionPanel();
+    this.renderer.highlightBoneControl(bone.name);
     
-    const jointDisplayName = jointName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-    
-    indicator.innerHTML = `
-      <div style="font-weight: bold; color: #00ff88; margin-bottom: 8px;">
-        📍 Selected: ${jointDisplayName}
-      </div>
-      <div style="margin-bottom: 6px;">
-        <span style="color: #88ccff;">🎯 Default:</span> Camera-relative movement
-      </div>
-      <div style="margin-bottom: 6px;">
-        <span style="color: #ffaa44;">⌨️ Ctrl:</span> XY plane (front/back)
-      </div>
-      <div style="margin-bottom: 6px;">
-        <span style="color: #ffaa44;">⌨️ Shift:</span> XZ plane (top/bottom)
-      </div>
-      <div>
-        <span style="color: #ffaa44;">⌨️ Shift+Ctrl:</span> YZ plane (side)
-      </div>
-    `;
-    
-    document.body.appendChild(indicator);
-    
-    // Removed: Auto-hide functionality - keep selection box always visible
-  }
-
-  private hideMovementAxisIndicator(): void {
-    const indicator = document.getElementById('movement-axis-indicator');
-    if (indicator) {
-      indicator.remove();
-    }
+    // Save the current state with the selected joint
+    this.saveCurrentState();
   }
 
   private clearSelection(): void {
-    this.renderer.clearJointHighlight();
-    this.hideMovementAxisIndicator();
-    this.selectedCharacter = null;
+    console.log('🔄 Clearing selection');
     this.selectedJoint = null;
-    this.showMessage('Selection cleared', 'info');
-    console.log('Selection cleared manually (Escape key)');
-  }
-
-  // Undo/Redo functionality
-  private deepCloneKeypoints(keypoints: Record<string, { x: number; y: number; z: number }>): Record<string, { x: number; y: number; z: number }> {
-    const cloned: Record<string, { x: number; y: number; z: number }> = {};
-    for (const [key, value] of Object.entries(keypoints)) {
-      cloned[key] = { 
-        x: Number(value.x), 
-        y: Number(value.y), 
-        z: Number(value.z) 
-      };
+    this.hideSelectionPanel();
+    this.renderer.highlightBoneControl(null);
+    
+    // Reset selection UI elements
+    const nameElement = document.getElementById('selected-joint-name-compact');
+    if (nameElement) {
+      nameElement.textContent = 'None';
+      nameElement.classList.add('none');
     }
-    return cloned;
+    
+    const positionElements = ['position-x-compact', 'position-y-compact', 'position-z-compact'];
+    positionElements.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = '0.00';
+    });
+    
+    const rotationElements = ['rotation-x-compact', 'rotation-y-compact', 'rotation-z-compact'];
+    rotationElements.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = '0.00°';
+    });
   }
 
-  private getCurrentState(): AppState {
-    const state = {
-      characters: this.characters.map(char => ({
-        id: char.id,
-        name: char.name,
-        color: char.color,
-        visible: char.visible,
-        keypoints: this.deepCloneKeypoints(char.keypoints)
-      })),
-      selectedCharacterId: this.selectedCharacter?.id || null,
-      selectedJoint: this.selectedJoint,
-      nextCharacterId: this.nextCharacterId
+  private resetSelectedJoint(): void {
+    if (this.selectedJoint) {
+      // Find the selected bone and reset its rotation
+      const bone = this.findBoneByName(this.selectedJoint);
+      if (bone) {
+        const beforeState = this.getCurrentState();
+        
+        // Reset rotation to identity
+        bone.rotation.set(0, 0, 0);
+        
+        // Save the action for undo/redo
+        this.saveAction('bone_reset', `Reset ${this.selectedJoint} joint`, beforeState);
+        
+        // Update the UI
+        this.updateSelectionUI(bone);
+        
+        this.showMessage(`Reset ${this.selectedJoint} joint`, 'info');
+        
+        // Save the current state after reset
+        this.saveCurrentState();
+      }
+    }
+  }
+
+  private updateSelectionUI(bone: THREE.Bone): void {
+    const nameElement = document.getElementById('selected-joint-name-compact');
+    const xPosElement = document.getElementById('position-x-compact');
+    const yPosElement = document.getElementById('position-y-compact');
+    const zPosElement = document.getElementById('position-z-compact');
+    const xRotElement = document.getElementById('rotation-x-compact');
+    const yRotElement = document.getElementById('rotation-y-compact');
+    const zRotElement = document.getElementById('rotation-z-compact');
+    
+    if (nameElement) {
+      nameElement.textContent = bone.name;
+      nameElement.classList.remove('none');
+    }
+    
+    // Get the world position of the bone
+    const worldPosition = new THREE.Vector3();
+    bone.getWorldPosition(worldPosition);
+    
+    // Update position display
+    if (xPosElement) xPosElement.textContent = worldPosition.x.toFixed(2);
+    if (yPosElement) yPosElement.textContent = worldPosition.y.toFixed(2);
+    if (zPosElement) zPosElement.textContent = worldPosition.z.toFixed(2);
+    
+    // Update rotation display (convert from radians to degrees)
+    if (xRotElement) xRotElement.textContent = `${(bone.rotation.x * 180 / Math.PI).toFixed(2)}°`;
+    if (yRotElement) yRotElement.textContent = `${(bone.rotation.y * 180 / Math.PI).toFixed(2)}°`;
+    if (zRotElement) zRotElement.textContent = `${(bone.rotation.z * 180 / Math.PI).toFixed(2)}°`;
+  }
+
+  private showSelectionPanel(): void {
+    const selectionDetails = document.getElementById('selection-details');
+    const resetBtn = document.getElementById('reset-joint-btn-compact');
+    
+    if (selectionDetails) {
+      selectionDetails.style.display = 'flex';
+    }
+    
+    if (resetBtn) {
+      resetBtn.style.display = 'block';
+    }
+  }
+
+  private hideSelectionPanel(): void {
+    const selectionDetails = document.getElementById('selection-details');
+    const resetBtn = document.getElementById('reset-joint-btn-compact');
+    
+    if (selectionDetails) {
+      selectionDetails.style.display = 'none';
+    }
+    
+    if (resetBtn) {
+      resetBtn.style.display = 'none';
+    }
+  }
+
+  private findBoneByName(boneName: string): THREE.Bone | null {
+    return this.renderer.getBoneByName(boneName);
+  }
+
+  private getCurrentState(): any {
+    // Return current state for undo/redo functionality
+    return {
+      timestamp: Date.now(),
+      boneRotations: this.renderer.getBoneRotations(),
+      modelPath: this.currentModelPath,
+      modelSettings: this.currentModelSettings
+    };
+  }
+
+  private saveAction(type: string, description: string, beforeState: any): void {
+    console.log(`Saving action: ${type} - ${description}`);
+    const afterState = this.getCurrentState();
+    
+    // Create a simplified app state structure for the undo manager
+    const beforeAppState: any = {
+      boneRotations: beforeState.boneRotations || {},
+      timestamp: beforeState.timestamp || Date.now()
     };
     
-    // Add debugging for state capture
-    console.log('Capturing current state:', {
-      characterCount: state.characters.length,
-      characters: state.characters.map(c => ({ 
-        id: c.id, 
-        name: c.name,
-        headPos: c.keypoints.head 
-      }))
-    });
+    const afterAppState: any = {
+      boneRotations: afterState.boneRotations || {},
+      timestamp: afterState.timestamp || Date.now()
+    };
     
-    return state;
-  }
-
-  private restoreState(state: AppState): void {
-    console.log('=== RESTORING STATE ===');
-    console.log('Current state before restore:', {
-      characters: this.characters.map(c => ({ id: c.id, name: c.name })),
-      nextCharacterId: this.nextCharacterId
-    });
-    console.log('Target state to restore:', {
-      characters: state.characters.map(c => ({ id: c.id, name: c.name })),
-      nextCharacterId: state.nextCharacterId
-    });
+    this.undoRedoManager.saveState(
+      type as any,
+      description,
+      beforeAppState,
+      afterAppState
+    );
     
-    // Clear current visual state
-    this.renderer.clearJointHighlight();
-    this.hideMovementAxisIndicator();
-    
-    // Remove all current characters from renderer
-    this.characters.forEach(char => this.renderer.removeCharacter(char));
-    
-    // Deep clone the state to avoid reference issues
-    this.characters = state.characters.map(char => ({
-      id: char.id,
-      name: char.name,
-      color: char.color,
-      visible: char.visible,
-      keypoints: this.deepCloneKeypoints(char.keypoints)
-    }));
-    this.nextCharacterId = state.nextCharacterId;
-    
-    // Re-add all characters to renderer
-    this.characters.forEach(char => {
-      this.constraintSolver.calculateBoneLengthsFromCharacter(char);
-      this.renderer.addCharacter(char);
-    });
-    
-    // Restore selection
-    this.selectedCharacter = state.selectedCharacterId 
-      ? this.characters.find(c => c.id === state.selectedCharacterId) || null
-      : null;
-    this.selectedJoint = state.selectedJoint;
-    
-    // Update UI
-    this.updateCharactersList();
-    this.updateKeypointsUI();
-    this.updateUndoRedoUI();
-    
-    // Restore visual selection if needed
-    if (this.selectedCharacter && this.selectedJoint) {
-      this.updateJointSelectionVisual(this.selectedCharacter, this.selectedJoint);
-      this.showMovementAxisIndicator(this.selectedCharacter, this.selectedJoint);
-    }
-    
-    console.log('State restored successfully:', {
-      characters: this.characters.map(c => ({ id: c.id, name: c.name })),
-      nextCharacterId: this.nextCharacterId
-    });
-    console.log('=== END RESTORE ===');
-  }
-
-  private saveAction(type: Parameters<UndoRedoManager['saveState']>[0], description: string, beforeState: AppState): void {
-    const afterState = this.getCurrentState();
-    console.log(`Saving action: ${description}`);
-    console.log('Before state:', beforeState);
-    console.log('After state:', afterState);
-    this.undoRedoManager.saveState(type, description, beforeState, afterState);
     this.updateUndoRedoUI();
   }
 
   private undo(): void {
-    const state = this.undoRedoManager.undo();
-    if (state) {
-      console.log('Undoing to state:', state);
-      this.restoreState(state);
-      this.showMessage('Undone', 'info');
+    console.log('🔄 Undo requested');
+    const beforeState = this.undoRedoManager.undo();
+    if (beforeState) {
+      console.log(`Undoing bone movement`);
+      this.restoreState(beforeState);
+      this.showMessage(`Undid bone movement`, 'info');
     } else {
-      console.log('Cannot undo - no previous state');
+      this.showMessage('Nothing to undo', 'warning');
     }
+    this.updateUndoRedoUI();
   }
 
   private redo(): void {
-    const state = this.undoRedoManager.redo();
-    if (state) {
-      console.log('Redoing to state:', state);
-      this.restoreState(state);
-      this.showMessage('Redone', 'info');
+    console.log('🔄 Redo requested');
+    const afterState = this.undoRedoManager.redo();
+    if (afterState) {
+      console.log(`Redoing bone movement`);
+      this.restoreState(afterState);
+      this.showMessage(`Redid bone movement`, 'info');
     } else {
-      console.log('Cannot redo - no next state');
+      this.showMessage('Nothing to redo', 'warning');
     }
+    this.updateUndoRedoUI();
   }
 
-  private jumpToHistoryAction(actionId: string): void {
-    const state = this.undoRedoManager.jumpToAction(actionId);
-    if (state) {
-      this.restoreState(state);
-      this.showMessage('Jumped to action', 'info');
+  private restoreState(state: any): void {
+    console.log('🔄 Restoring state', state);
+    
+    if (state.boneRotations) {
+      this.renderer.setBoneRotations(state.boneRotations);
     }
+    
+    // Restore model if it has changed
+    if (state.modelPath && state.modelPath !== this.currentModelPath) {
+      this.loadModelFromPath(state.modelPath).then(() => {
+        if (state.modelSettings) {
+          this.renderer.updateGLTFSettings(state.modelSettings);
+        }
+      }).catch(error => {
+        console.warn('⚠️ Could not restore model during undo/redo:', error);
+      });
+    }
+    
+    // Save the current state to keep it in sync
+    this.saveCurrentState();
   }
 
   private updateUndoRedoUI(): void {
     const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
     const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
-    const historyList = document.getElementById('history-list')!;
-
-    // Update button states
+    
     if (undoBtn) {
       undoBtn.disabled = !this.undoRedoManager.canUndo();
     }
+    
     if (redoBtn) {
       redoBtn.disabled = !this.undoRedoManager.canRedo();
     }
-
-    // Update history list
-    const history = this.undoRedoManager.getHistory();
-    const currentIndex = this.undoRedoManager.getCurrentIndex();
-
-    console.log(`History update: ${history.length} items, current index: ${currentIndex}`);
-
-    if (history.length === 0) {
-      historyList.innerHTML = '<p class="no-history">No actions yet</p>';
-    } else {
-      historyList.innerHTML = history.map((action, index) => {
-        const date = new Date(action.timestamp);
-        const timeStr = date.toLocaleTimeString();
-        
-        let className = 'history-item';
-        if (index === currentIndex) {
-          className += ' current';
-        } else if (index > currentIndex) {
-          className += ' future';
-        }
-
-        // Show character counts for better debugging
-        const beforeCount = action.beforeState.characters.length;
-        const afterCount = action.afterState.characters.length;
-        const debugInfo = `(${beforeCount}→${afterCount})`;
-
-        return `
-          <div class="${className}" data-action-id="${action.id}">
-            <span>${action.description} ${debugInfo}</span>
-            <span class="history-item-time">${timeStr}</span>
-          </div>
-        `;
-      }).join('');
-
-      // Add click handlers to history items
-      historyList.querySelectorAll('.history-item').forEach(item => {
-        item.addEventListener('click', () => {
-          const actionId = (item as HTMLElement).dataset.actionId!;
-          this.jumpToHistoryAction(actionId);
-        });
-      });
-    }
   }
 
-  // Missing methods implementation
-  private updateKeypointsUI(): void {
-    if (!this.keypointsContainer) return;
+  private showMessage(message: string, type: 'success' | 'error' | 'info' | 'warning'): void {
+    console.log(`📢 ${type.toUpperCase()}: ${message}`);
     
-    if (!this.selectedCharacter) {
-      this.keypointsContainer.innerHTML = '<p>Select a character to edit keypoints</p>';
-      return;
-    }
-
-    // Simple display of current character's keypoints
-    const keypointsHtml = Object.entries(this.selectedCharacter.keypoints)
-      .map(([jointName, position]) => `
-        <div class="keypoint-item">
-          <span>${jointName}:</span>
-          <span>x:${position.x.toFixed(2)} y:${position.y.toFixed(2)} z:${position.z.toFixed(2)}</span>
-        </div>
-      `).join('');
-    
-    this.keypointsContainer.innerHTML = `
-      <h4>${this.selectedCharacter.name} Keypoints</h4>
-      ${keypointsHtml}
-    `;
-  }
-
-  private updateCharactersList(): void {
-    if (!this.charactersContainer) return;
-    
-    console.log(`Updating characters list: ${this.characters.length} characters`);
-    this.characters.forEach(char => {
-      console.log(`  Character ${char.id}: ${char.name}`);
-    });
-    
-    if (this.characters.length === 0) {
-      this.charactersContainer.innerHTML = '<p>No characters created yet</p>';
-      return;
-    }
-
-    const charactersHtml = this.characters.map(char => `
-      <div class="character-item ${char === this.selectedCharacter ? 'selected' : ''}" data-character-id="${char.id}">
-        <div class="character-color" style="background-color: ${char.color}"></div>
-        <span>${char.name}</span>
-        <button class="delete-char-btn" data-character-id="${char.id}">×</button>
-      </div>
-    `).join('');
-    
-    this.charactersContainer.innerHTML = charactersHtml;
-    
-    // Add click handlers
-    this.charactersContainer.querySelectorAll('.character-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const charId = parseInt((item as HTMLElement).dataset.characterId!);
-        const character = this.characters.find(c => c.id === charId);
-        if (character) {
-          this.selectCharacter(character);
-        }
-      });
-    });
-
-    // Add toggle visibility handlers
-    this.charactersContainer.querySelectorAll('.toggle-visibility').forEach(button => {
-      button.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const charId = parseInt((button as HTMLButtonElement).dataset.characterId!);
-        const character = this.characters.find(c => c.id === charId);
-        if (character) {
-          this.toggleCharacterVisibility(character);
-        }
-      });
-    });
-
-    // Add delete handlers
-    this.charactersContainer.querySelectorAll('.delete-character').forEach(button => {
-      button.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const charId = parseInt((button as HTMLButtonElement).dataset.characterId!);
-        this.deleteCharacter(charId);
-      });
-    });
-  }
-
-  private restoreFromBrowserState(): void {
-    const savedState = this.stateManager.loadState();
-    if (savedState) {
-      console.log('Restoring app state from browser storage');
-      
-      // Restore characters
-      this.characters = savedState.characters;
-      this.nextCharacterId = savedState.nextCharacterId;
-      
-      // Restore camera
-      this.renderer.setCameraState(savedState.cameraState);
-      
-      // Restore scene settings
-      this.renderer.updateSceneSettings(savedState.sceneSettings);
-      
-      // Restore selection
-      if (savedState.selectedCharacterId) {
-        this.selectedCharacter = this.characters.find(c => c.id === savedState.selectedCharacterId) || null;
-      }
-      this.selectedJoint = savedState.selectedJoint;
-      
-      // Render all characters
-      this.characters.forEach(character => {
-        this.renderer.addCharacter(character);
-      });
-      
-      // Update UI
-      this.updateCharactersList();
-      this.updateKeypointsUI();
-      
-      console.log('State restored successfully');
-    } else {
-      // No saved state, add initial character
-      this.addCharacter();
-    }
-  }
-
-  private saveToBrowserState(): void {
-    const cameraState = this.renderer.getCameraState();
-    const sceneSettings = this.renderer.getSceneSettings();
-    
-    this.stateManager.saveState(
-      this.characters,
-      this.selectedCharacter?.id || null,
-      this.selectedJoint,
-      this.nextCharacterId,
-      cameraState,
-      sceneSettings
-    );
-  }
-
-  private setupAutoSave(): void {
-    // Listen for auto-save events
-    document.addEventListener('poser3d-auto-save', () => {
-      this.saveToBrowserState();
-    });
-    
-    // We'll manually trigger markDirty() in key methods
-  }
-
-  private exportJSON(): void {
-    try {
-      const stateJson = this.stateManager.exportStateAsJSON();
-      const blob = new Blob([stateJson], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `poser3d-state-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      this.showMessage('State exported successfully!', 'success');
-    } catch (error) {
-      console.error('Export failed:', error);
-      this.showMessage('Export failed', 'error');
-    }
-  }
-
-  private importJSON(): void {
-    const input = document.getElementById('file-input') as HTMLInputElement;
-    input.click();
-  }
-
-  private handleFileImport(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string;
-        const state = this.stateManager.importStateFromJSON(content);
-        
-        // Clear current state
-        this.clearAll();
-        
-        // Restore from imported state
-        this.characters = state.characters;
-        this.nextCharacterId = state.nextCharacterId;
-        this.renderer.setCameraState(state.cameraState);
-        this.renderer.updateSceneSettings(state.sceneSettings);
-        
-        // Render characters
-        this.characters.forEach(character => {
-          this.renderer.addCharacter(character);
-        });
-        
-        // Update UI
-        this.updateCharactersList();
-        this.updateKeypointsUI();
-        
-        this.showMessage('State imported successfully!', 'success');
-      } catch (error) {
-        console.error('Import failed:', error);
-        this.showMessage('Import failed - invalid file format', 'error');
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  private applyPreset(presetName: string): void {
-    if (!this.selectedCharacter) {
-      this.showMessage('Please select a character first', 'warning');
-      return;
-    }
-
-    const beforeState = this.getCurrentState();
-    
-    if (this.presets[presetName]) {
-      this.selectedCharacter.keypoints = { ...this.presets[presetName] };
-      this.renderer.updateCharacter(this.selectedCharacter);
-      this.updateKeypointsUI();
-      
-      const afterState = this.getCurrentState();
-      this.undoRedoManager.saveState(
-        'preset-apply',
-        `Apply ${presetName} preset`,
-        beforeState,
-        afterState
-      );
-      
-      this.updateUndoRedoUI();
-      this.showMessage(`Applied ${presetName} preset`, 'success');
-      this.stateManager.markDirty();
-    }
-  }
-
-  private showMessage(message: string, type: 'success' | 'error' | 'warning' | 'info'): void {
-    // Simple message display - you can enhance this with a proper toast system
-    console.log(`[${type.toUpperCase()}] ${message}`);
-    
-    // Create or update a simple message element
+    // Create or update message element
     let messageEl = document.getElementById('message-display');
     if (!messageEl) {
       messageEl = document.createElement('div');
@@ -1083,38 +720,41 @@ class StickFigureApp3D {
         position: fixed;
         top: 20px;
         right: 20px;
-        padding: 10px 20px;
+        padding: 12px 16px;
         border-radius: 4px;
+        color: white;
+        font-weight: bold;
         z-index: 1000;
         max-width: 300px;
-        transition: all 0.3s ease;
+        word-wrap: break-word;
       `;
       document.body.appendChild(messageEl);
     }
     
-    // Set message style based on type
-    const colors = {
-      success: 'background: #4caf50; color: white;',
-      error: 'background: #f44336; color: white;',
-      warning: 'background: #ff9800; color: white;',
-      info: 'background: #2196f3; color: white;'
-    };
-    
-    messageEl.style.cssText += colors[type];
+    // Set message and styling based on type
     messageEl.textContent = message;
+    const colors = {
+      success: '#4CAF50',
+      error: '#f44336',
+      info: '#2196F3',
+      warning: '#FF9800'
+    };
+    messageEl.style.backgroundColor = colors[type];
     messageEl.style.display = 'block';
     
-    // Auto-hide after 3 seconds
+    // Hide after 3 seconds
     setTimeout(() => {
-      messageEl!.style.display = 'none';
+      if (messageEl) {
+        messageEl.style.display = 'none';
+      }
     }, 3000);
   }
 
   private updatePlaneIndicator(movementMode: string): void {
-    // Update movement plane indicator in the UI
     const indicator = document.getElementById('plane-indicator');
     if (indicator) {
-      indicator.textContent = `Movement: ${movementMode}`;
+      indicator.style.display = 'block';
+      indicator.textContent = `Movement Mode: ${movementMode.toUpperCase()}`;
     }
   }
 
@@ -1125,50 +765,383 @@ class StickFigureApp3D {
     }
   }
 
-  private toggleCharacterVisibility(character: Character): void {
-    character.visible = !character.visible;
-    this.renderer.updateCharacter(character);
-    this.updateCharactersList();
+  private async loadSavedState(): Promise<void> {
+    console.log('📥 === LOAD SAVED STATE CALLED ===');
+    
+    try {
+      const savedState = localStorage.getItem('poser3d-simple-state');
+      
+      if (!savedState) {
+        console.log('📁 No saved state found');
+        return;
+      }
+      
+      console.log('📦 Raw saved state:', savedState);
+      const state = JSON.parse(savedState);
+      console.log('📥 Parsed saved state:', state);
+      
+      // Restore model path and settings
+      this.currentModelPath = state.modelPath || null;
+      this.currentModelSettings = state.modelSettings || null;
+      
+      // Load model if we have one
+      if (this.currentModelPath) {
+        console.log('🔄 Loading saved model:', this.currentModelPath);
+        try {
+          await this.loadModelFromPath(this.currentModelPath, true); // Preserve settings
+          
+          // Apply model settings after model is loaded (with a small delay to ensure model is ready)
+          setTimeout(() => {
+            if (this.currentModelSettings) {
+              console.log('🎛️ Applying saved model settings:', this.currentModelSettings);
+              
+              // Apply to renderer
+              this.renderer.updateGLTFSettings(this.currentModelSettings);
+              
+              // Update UI to reflect the loaded settings
+              this.updateModelSettingsUI(this.currentModelSettings);
+              
+              // Verify the settings were applied
+              const appliedSettings = this.renderer.getGLTFSettings();
+              console.log('✅ Settings applied. Current renderer settings:', appliedSettings);
+            }
+          }, 100);
+          
+          // Restore bone rotations
+          if (state.boneRotations && Object.keys(state.boneRotations).length > 0) {
+            console.log('🦴 Restoring bone rotations:', Object.keys(state.boneRotations).length, 'bones');
+            
+            // Wait for model to be fully loaded
+            setTimeout(() => {
+              const rotationsToApply: Record<string, THREE.Euler> = {};
+              Object.entries(state.boneRotations).forEach(([key, rotation]: [string, any]) => {
+                rotationsToApply[key] = new THREE.Euler(rotation.x, rotation.y, rotation.z, rotation.order as THREE.EulerOrder);
+              });
+              
+              this.renderer.setBoneRotations(rotationsToApply);
+              console.log('✅ Bone rotations restored');
+            }, 1000);
+          }
+          
+        } catch (error) {
+          console.warn('⚠️ Could not load saved model:', error);
+        }
+      }
+      
+      // Restore camera position
+      if (state.cameraPosition && state.cameraTarget) {
+        const camera = this.renderer.getCamera();
+        const controls = this.renderer.getControls();
+        
+        camera.position.set(state.cameraPosition.x, state.cameraPosition.y, state.cameraPosition.z);
+        controls.target.set(state.cameraTarget.x, state.cameraTarget.y, state.cameraTarget.z);
+        controls.update();
+      }
+      
+      // Restore selected joint
+      if (state.selectedJoint) {
+        this.selectedJoint = state.selectedJoint;
+      }
+      
+      // Restore bone depth limit
+      if (state.boneDepthLimit !== undefined) {
+        console.log('🔍 Restoring bone depth limit:', state.boneDepthLimit);
+        this.renderer.setBoneDepthLimit(state.boneDepthLimit);
+        
+        // Update the UI slider
+        const boneDepthSlider = document.getElementById('bone-depth-limit') as HTMLInputElement;
+        if (boneDepthSlider) {
+          boneDepthSlider.value = state.boneDepthLimit.toString();
+          
+          // Update value display
+          const valueDisplay = boneDepthSlider.parentElement?.querySelector('.value-display');
+          if (valueDisplay) {
+            valueDisplay.textContent = state.boneDepthLimit.toString();
+          }
+        }
+      }
+      
+      console.log('✅ State loaded successfully');
+      
+    } catch (error) {
+      console.error('❌ Error loading state:', error);
+    }
+  }
+
+  private async loadModelFromPath(modelPath: string, preserveSettings: boolean = false): Promise<void> {
+    try {
+      console.log(`🎭 Loading model from path: ${modelPath}`);
+      await this.renderer.loadGLTFModel(modelPath);
+      
+      // Update current model info
+      this.currentModelPath = modelPath;
+      
+      if (!preserveSettings) {
+        // Normal loading - get current settings and enable model
+        this.currentModelSettings = this.renderer.getGLTFSettings();
+        
+        // Enable the GLTF model display
+        this.renderer.updateGLTFSettings({ showModel: true });
+        
+        // Update the UI checkbox
+        const showGltfModelCheckbox = document.getElementById('show-gltf-model') as HTMLInputElement;
+        if (showGltfModelCheckbox) {
+          showGltfModelCheckbox.checked = true;
+        }
+      }
+      
+      // Initialize bone depth slider after model is loaded
+      setTimeout(() => {
+        this.updateBoneDepthSlider();
+      }, 200);
+      
+      console.log('✅ Model loaded successfully');
+    } catch (error) {
+      console.error('❌ Failed to load model:', error);
+      throw error;
+    }
+  }
+
+  private saveCurrentState(): void {
+    console.log('💾 === SAVE CURRENT STATE CALLED ===');
+    
+    try {
+      const camera = this.renderer.getCamera();
+      const controls = this.renderer.getControls();
+      
+      // Get current bone rotations and convert to plain objects
+      const currentBoneRotations = this.renderer.getBoneRotations();
+      const serializedBoneRotations: Record<string, any> = {};
+      
+      Object.entries(currentBoneRotations).forEach(([key, euler]) => {
+        serializedBoneRotations[key] = {
+          x: euler.x,
+          y: euler.y,
+          z: euler.z,
+          order: euler.order
+        };
+      });
+      
+      console.log('💾 Saving bone rotations:', Object.keys(serializedBoneRotations).length, 'bones');
+      
+      // Simple state object
+      const state = {
+        timestamp: Date.now(),
+        modelPath: this.currentModelPath,
+        modelSettings: this.currentModelSettings,
+        boneRotations: serializedBoneRotations,
+        selectedJoint: this.selectedJoint,
+        boneDepthLimit: this.renderer.getBoneDepthLimit(),
+        cameraPosition: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+        cameraTarget: { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+      };
+      
+      // Save directly to localStorage
+      localStorage.setItem('poser3d-simple-state', JSON.stringify(state));
+      console.log('✅ State saved to localStorage');
+      
+    } catch (error) {
+      console.error('❌ Error saving state:', error);
+    }
+  }
+
+  private setupAutoSave(): void {
+    // Set up auto-save event listener
+    document.addEventListener('poser3d-auto-save', () => {
+      this.saveCurrentState();
+    });
+    
+    // Save state when page is about to unload
+    window.addEventListener('beforeunload', () => {
+      this.saveCurrentState();
+    });
+    
+    // Mark state as dirty when changes occur
     this.stateManager.markDirty();
   }
 
-  private deleteCharacter(characterId: number): void {
-    const characterIndex = this.characters.findIndex(c => c.id === characterId);
-    if (characterIndex === -1) return;
+  public exportCharacterState(): string {
+    const characterState = {
+      modelPath: this.currentModelPath,
+      modelSettings: this.currentModelSettings,
+      boneRotations: this.renderer.getBoneRotations(),
+      selectedJoint: this.selectedJoint,
+      timestamp: Date.now(),
+      version: '1.0.0'
+    };
+    
+    return JSON.stringify(characterState, null, 2);
+  }
 
-    const beforeState = this.getCurrentState();
-    
-    // Remove character from array
-    this.characters.splice(characterIndex, 1);
-    
-    // Remove from renderer
-    const character = this.characters.find(c => c.id === characterId);
-    if (character) {
-      this.renderer.removeCharacter(character);
+  public importCharacterState(jsonString: string): void {
+    try {
+      const characterState = JSON.parse(jsonString);
+      
+      // Validate the imported state
+      if (!characterState || typeof characterState !== 'object') {
+        throw new Error('Invalid character state format');
+      }
+      
+      console.log('📥 Importing character state:', characterState);
+      
+      // Load the model if specified
+      if (characterState.modelPath) {
+        this.loadModelFromPath(characterState.modelPath).then(() => {
+          // Apply model settings
+          if (characterState.modelSettings) {
+            this.renderer.updateGLTFSettings(characterState.modelSettings);
+          }
+          
+          // Apply bone rotations
+          if (characterState.boneRotations) {
+            this.renderer.setBoneRotations(characterState.boneRotations);
+          }
+          
+          // Restore selected joint
+          if (characterState.selectedJoint) {
+            this.selectedJoint = characterState.selectedJoint;
+            const bone = this.renderer.getBoneByName(characterState.selectedJoint);
+            if (bone) {
+              this.updateSelectionUI(bone);
+              this.showSelectionPanel();
+              this.renderer.highlightBoneControl(characterState.selectedJoint);
+            }
+          }
+          
+          // Save the imported state
+          this.saveCurrentState();
+          
+          this.showMessage('Character state imported successfully', 'success');
+        }).catch(error => {
+          this.showMessage(`Error loading model: ${error}`, 'error');
+        });
+      } else {
+        // No model specified, just apply bone rotations
+        if (characterState.boneRotations) {
+          this.renderer.setBoneRotations(characterState.boneRotations);
+        }
+        
+        // Restore selected joint
+        if (characterState.selectedJoint) {
+          this.selectedJoint = characterState.selectedJoint;
+          const bone = this.renderer.getBoneByName(characterState.selectedJoint);
+          if (bone) {
+            this.updateSelectionUI(bone);
+            this.showSelectionPanel();
+            this.renderer.highlightBoneControl(characterState.selectedJoint);
+          }
+        }
+        
+        // Save the imported state
+        this.saveCurrentState();
+        
+        this.showMessage('Character pose imported successfully', 'success');
+      }
+      
+    } catch (error) {
+      this.showMessage(`Error importing character state: ${error}`, 'error');
+    }
+  }
+
+  private updateModelSettingsUI(modelSettings: GLTFModelSettings): void {
+    // Update opacity slider
+    const modelOpacitySlider = document.getElementById('model-opacity') as HTMLInputElement;
+    if (modelOpacitySlider && modelSettings.modelOpacity !== undefined) {
+      modelOpacitySlider.value = modelSettings.modelOpacity.toString();
+      
+      // Update value display
+      const valueDisplay = modelOpacitySlider.parentElement?.querySelector('.value-display');
+      if (valueDisplay) {
+        valueDisplay.textContent = modelSettings.modelOpacity.toFixed(1);
+      }
     }
     
-    // Clear selection if this character was selected
-    if (this.selectedCharacter?.id === characterId) {
-      this.selectedCharacter = null;
-      this.selectedJoint = null;
+    // Update scale slider
+    const modelScaleSlider = document.getElementById('model-scale') as HTMLInputElement;
+    if (modelScaleSlider && modelSettings.modelScale !== undefined) {
+      modelScaleSlider.value = modelSettings.modelScale.toString();
+      
+      // Update value display
+      const valueDisplay = modelScaleSlider.parentElement?.querySelector('.value-display');
+      if (valueDisplay) {
+        valueDisplay.textContent = modelSettings.modelScale.toFixed(1);
+      }
     }
     
-    // Update UI
-    this.updateCharactersList();
-    this.updateKeypointsUI();
+    // Update show model checkbox
+    const showGltfModelCheckbox = document.getElementById('show-gltf-model') as HTMLInputElement;
+    if (showGltfModelCheckbox && modelSettings.showModel !== undefined) {
+      showGltfModelCheckbox.checked = modelSettings.showModel;
+    }
     
-    const afterState = this.getCurrentState();
-    this.undoRedoManager.saveState(
-      'character-delete',
-      `Delete character ${characterId}`,
-      beforeState,
-      afterState
-    );
+    // Update bone depth slider range and current value
+    this.updateBoneDepthSlider();
+  }
+
+  private updateBoneDepthSlider(): void {
+    const boneDepthSlider = document.getElementById('bone-depth-limit') as HTMLInputElement;
+    if (boneDepthSlider) {
+      const maxDepth = this.renderer.getMaxBoneDepth();
+      const currentDepth = this.renderer.getBoneDepthLimit();
+      
+      // Update slider range
+      boneDepthSlider.max = maxDepth.toString();
+      boneDepthSlider.value = currentDepth.toString();
+      
+      // Update value display
+      const valueDisplay = boneDepthSlider.parentElement?.querySelector('.value-display');
+      if (valueDisplay) {
+        valueDisplay.textContent = currentDepth.toString();
+      }
+      
+      console.log(`🔍 Updated bone depth slider: max=${maxDepth}, current=${currentDepth}`);
+    }
+  }
+
+  // Debug method to test state saving manually
+  public testStateSaving(): void {
+    console.log('🧪 Manual state saving test');
     
-    this.updateUndoRedoUI();
-    this.stateManager.markDirty();
+    // Test save
+    this.saveCurrentState();
+    
+    // Test load
+    const savedState = localStorage.getItem('poser3d-simple-state');
+    console.log('💾 Saved state:', savedState ? JSON.parse(savedState) : 'null');
+    
+    // Test bone rotations
+    const boneRotations = this.renderer.getBoneRotations();
+    console.log('🦴 Current bone rotations:', Object.keys(boneRotations).length, 'bones');
+    
+    // Test model settings
+    try {
+      const modelSettings = this.renderer.getGLTFSettings();
+      console.log('🎛️ Current model settings:', modelSettings);
+    } catch (error) {
+      console.error('❌ Error getting model settings:', error);
+    }
+  }
+
+  // Debug method to clear saved state
+  public clearSavedState(): void {
+    localStorage.removeItem('poser3d-app-state');
+    console.log('🗑️ Cleared saved state');
   }
 }
 
-// Initialize the app
-new StickFigureApp3D();
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  const app = new StickFigureApp3D();
+  
+  // Add app to window for debugging
+  (window as any).app = app;
+  
+  // Add test function to window
+  (window as any).testState = () => {
+    console.log('🧪 Running state test from window...');
+    app.testStateSaving();
+  };
+  
+  console.log('🚀 App initialized and available as window.app');
+  console.log('🧪 Test function available as window.testState()');
+});

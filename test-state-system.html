@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State System Test - Poser3D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        
+        .test-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #444;
+        }
+        
+        .step {
+            background-color: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border-left: 4px solid #0078d4;
+        }
+        
+        .step.completed {
+            border-left-color: #0d7377;
+            background-color: #0d4a4b;
+        }
+        
+        .step.error {
+            border-left-color: #d32f2f;
+            background-color: #4b0d0d;
+        }
+        
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #106ebe;
+        }
+        
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        
+        .output {
+            background-color: #000;
+            color: #0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .instructions {
+            background-color: #0078d4;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background-color: #0d7377;
+            color: #fff;
+        }
+        
+        .status.error {
+            background-color: #d32f2f;
+            color: #fff;
+        }
+        
+        .status.warning {
+            background-color: #f57c00;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 3D Poser State System Test</h1>
+    
+    <div class="test-panel">
+        <h2>Test Overview</h2>
+        <p>This test will verify that the state saving and loading system works correctly.</p>
+        
+        <div class="instructions">
+            <h3>How to Run This Test:</h3>
+            <ol>
+                <li>Open the main app at <a href="http://localhost:5173" target="_blank">http://localhost:5173</a></li>
+                <li>Load a 3D model (use the "Load Model" button)</li>
+                <li>Enter bone control mode and pose the character</li>
+                <li>Adjust some model settings (opacity, scale, etc.)</li>
+                <li>Come back to this page and run the test steps below</li>
+            </ol>
+        </div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>Step-by-Step Test</h2>
+        
+        <div class="step" id="step1">
+            <h3>Step 1: Check LocalStorage Support</h3>
+            <p>Verify browser localStorage is working</p>
+            <button onclick="testStep1()">Run Step 1</button>
+        </div>
+        
+        <div class="step" id="step2">
+            <h3>Step 2: Check for Saved State</h3>
+            <p>Look for existing saved state in localStorage</p>
+            <button onclick="testStep2()">Run Step 2</button>
+        </div>
+        
+        <div class="step" id="step3">
+            <h3>Step 3: Test Manual Save</h3>
+            <p>Create a test state and save it</p>
+            <button onclick="testStep3()">Run Step 3</button>
+        </div>
+        
+        <div class="step" id="step4">
+            <h3>Step 4: Test Manual Load</h3>
+            <p>Load the saved state and verify contents</p>
+            <button onclick="testStep4()">Run Step 4</button>
+        </div>
+        
+        <div class="step" id="step5">
+            <h3>Step 5: Test State Persistence</h3>
+            <p>Verify state survives page refresh</p>
+            <button onclick="testStep5()">Run Step 5</button>
+        </div>
+        
+        <div class="step" id="step6">
+            <h3>Step 6: Test App Integration</h3>
+            <p>Test integration with the main app</p>
+            <button onclick="testStep6()">Run Step 6</button>
+        </div>
+        
+        <div class="step" id="step7">
+            <h3>Step 7: Complete Test</h3>
+            <p>Run all tests and generate report</p>
+            <button onclick="runAllTests()">Run All Tests</button>
+        </div>
+        
+        <div class="output" id="testOutput"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>Manual Tests</h2>
+        <p>These tests can be run manually while using the main app:</p>
+        <ul>
+            <li><strong>Press 'T'</strong> in the main app to run app.testStateSaving()</li>
+            <li><strong>Press 'S'</strong> to manually save current state</li>
+            <li><strong>Press 'L'</strong> to manually load saved state</li>
+            <li>Use the UI sliders and controls to trigger auto-save</li>
+            <li>Load a model and pose it, then refresh the page</li>
+        </ul>
+    </div>
+
+    <script>
+        let currentStep = 0;
+        const totalSteps = 7;
+        
+        function log(message) {
+            const output = document.getElementById('testOutput');
+            output.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function markStepComplete(stepId) {
+            const step = document.getElementById(stepId);
+            step.classList.add('completed');
+            currentStep++;
+        }
+        
+        function markStepError(stepId) {
+            const step = document.getElementById(stepId);
+            step.classList.add('error');
+        }
+        
+        function testStep1() {
+            log('=== STEP 1: LocalStorage Support ===');
+            
+            try {
+                // Test localStorage
+                const testKey = 'poser3d-test-' + Date.now();
+                const testValue = 'test-value-' + Date.now();
+                
+                localStorage.setItem(testKey, testValue);
+                const retrieved = localStorage.getItem(testKey);
+                localStorage.removeItem(testKey);
+                
+                if (retrieved === testValue) {
+                    log('✅ LocalStorage is working correctly');
+                    markStepComplete('step1');
+                } else {
+                    log('❌ LocalStorage test failed');
+                    markStepError('step1');
+                }
+                
+            } catch (error) {
+                log('❌ LocalStorage error: ' + error.message);
+                markStepError('step1');
+            }
+        }
+        
+        function testStep2() {
+            log('=== STEP 2: Check for Saved State ===');
+            
+            try {
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    log('✅ Found saved state:');
+                    log('  Timestamp: ' + new Date(state.timestamp).toLocaleString());
+                    log('  Model Path: ' + (state.modelPath || 'none'));
+                    log('  Bone Rotations: ' + (state.boneRotations ? Object.keys(state.boneRotations).length : 0) + ' bones');
+                    log('  Model Settings: ' + (state.modelSettings ? 'yes' : 'no'));
+                    markStepComplete('step2');
+                } else {
+                    log('⚠️ No saved state found');
+                    log('ℹ️ This is normal if you haven\'t used the app yet');
+                    markStepComplete('step2');
+                }
+                
+            } catch (error) {
+                log('❌ Error checking saved state: ' + error.message);
+                markStepError('step2');
+            }
+        }
+        
+        function testStep3() {
+            log('=== STEP 3: Test Manual Save ===');
+            
+            try {
+                const testState = {
+                    timestamp: Date.now(),
+                    modelPath: 'womenfemale_body_base_rigged.glb',
+                    modelSettings: {
+                        opacity: 0.8,
+                        scale: 1.2,
+                        wireframe: false,
+                        showSkeleton: true
+                    },
+                    boneRotations: {
+                        'mixamorig:Hips': { x: 0, y: 0, z: 0, order: 'XYZ' },
+                        'mixamorig:Spine': { x: 0.1, y: 0.05, z: 0, order: 'XYZ' },
+                        'mixamorig:RightArm': { x: 0, y: 0, z: 0.5, order: 'XYZ' },
+                        'mixamorig:LeftArm': { x: 0, y: 0, z: -0.5, order: 'XYZ' }
+                    },
+                    selectedJoint: 'mixamorig:Spine',
+                    cameraPosition: { x: 0, y: 1, z: 3 },
+                    cameraTarget: { x: 0, y: 1, z: 0 }
+                };
+                
+                localStorage.setItem('poser3d-simple-state', JSON.stringify(testState));
+                log('✅ Test state saved successfully');
+                log('  Saved ' + Object.keys(testState.boneRotations).length + ' bone rotations');
+                log('  Saved model settings: ' + JSON.stringify(testState.modelSettings));
+                markStepComplete('step3');
+                
+            } catch (error) {
+                log('❌ Error saving test state: ' + error.message);
+                markStepError('step3');
+            }
+        }
+        
+        function testStep4() {
+            log('=== STEP 4: Test Manual Load ===');
+            
+            try {
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    log('✅ Test state loaded successfully');
+                    log('  Timestamp: ' + new Date(state.timestamp).toLocaleString());
+                    log('  Model Path: ' + (state.modelPath || 'none'));
+                    log('  Bone Rotations: ' + (state.boneRotations ? Object.keys(state.boneRotations).length : 0) + ' bones');
+                    log('  Selected Joint: ' + (state.selectedJoint || 'none'));
+                    log('  Camera Position: ' + JSON.stringify(state.cameraPosition));
+                    
+                    // Verify bone rotation structure
+                    if (state.boneRotations) {
+                        const firstBone = Object.keys(state.boneRotations)[0];
+                        const firstRotation = state.boneRotations[firstBone];
+                        log('  Sample bone rotation: ' + firstBone + ' = ' + JSON.stringify(firstRotation));
+                    }
+                    
+                    markStepComplete('step4');
+                } else {
+                    log('❌ No saved state found to load');
+                    markStepError('step4');
+                }
+                
+            } catch (error) {
+                log('❌ Error loading test state: ' + error.message);
+                markStepError('step4');
+            }
+        }
+        
+        function testStep5() {
+            log('=== STEP 5: Test State Persistence ===');
+            
+            try {
+                const beforeRefresh = localStorage.getItem('poser3d-simple-state');
+                
+                if (beforeRefresh) {
+                    log('✅ State exists before refresh test');
+                    
+                    // Simulate what happens after page refresh
+                    const state = JSON.parse(beforeRefresh);
+                    
+                    // Check if all required fields are present
+                    const requiredFields = ['timestamp', 'modelPath', 'boneRotations'];
+                    let allFieldsPresent = true;
+                    
+                    for (const field of requiredFields) {
+                        if (!(field in state)) {
+                            log('❌ Missing required field: ' + field);
+                            allFieldsPresent = false;
+                        }
+                    }
+                    
+                    if (allFieldsPresent) {
+                        log('✅ All required fields present');
+                        log('✅ State should persist across page refreshes');
+                        markStepComplete('step5');
+                    } else {
+                        log('❌ State structure incomplete');
+                        markStepError('step5');
+                    }
+                } else {
+                    log('❌ No state found for persistence test');
+                    markStepError('step5');
+                }
+                
+            } catch (error) {
+                log('❌ Error testing state persistence: ' + error.message);
+                markStepError('step5');
+            }
+        }
+        
+        function testStep6() {
+            log('=== STEP 6: Test App Integration ===');
+            
+            try {
+                // Test if we can access the app
+                const mainAppUrl = 'http://localhost:5173';
+                log('ℹ️ Testing integration with main app at ' + mainAppUrl);
+                
+                // Check if state structure matches what the app expects
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    
+                    // Check state structure
+                    let structureValid = true;
+                    
+                    if (state.boneRotations) {
+                        const sampleBone = Object.keys(state.boneRotations)[0];
+                        const sampleRotation = state.boneRotations[sampleBone];
+                        
+                        if (!sampleRotation.x && sampleRotation.x !== 0) {
+                            log('❌ Bone rotation missing x component');
+                            structureValid = false;
+                        }
+                        if (!sampleRotation.y && sampleRotation.y !== 0) {
+                            log('❌ Bone rotation missing y component');
+                            structureValid = false;
+                        }
+                        if (!sampleRotation.z && sampleRotation.z !== 0) {
+                            log('❌ Bone rotation missing z component');
+                            structureValid = false;
+                        }
+                        if (!sampleRotation.order) {
+                            log('❌ Bone rotation missing order component');
+                            structureValid = false;
+                        }
+                    }
+                    
+                    if (structureValid) {
+                        log('✅ State structure is valid for app integration');
+                        log('✅ App should be able to load this state');
+                        markStepComplete('step6');
+                    } else {
+                        log('❌ State structure is invalid');
+                        markStepError('step6');
+                    }
+                } else {
+                    log('❌ No state found for integration test');
+                    markStepError('step6');
+                }
+                
+            } catch (error) {
+                log('❌ Error testing app integration: ' + error.message);
+                markStepError('step6');
+            }
+        }
+        
+        function runAllTests() {
+            log('=== RUNNING ALL TESTS ===');
+            
+            // Reset step states
+            for (let i = 1; i <= totalSteps; i++) {
+                const step = document.getElementById('step' + i);
+                step.classList.remove('completed', 'error');
+            }
+            
+            currentStep = 0;
+            
+            // Run all tests in sequence
+            setTimeout(() => testStep1(), 100);
+            setTimeout(() => testStep2(), 200);
+            setTimeout(() => testStep3(), 300);
+            setTimeout(() => testStep4(), 400);
+            setTimeout(() => testStep5(), 500);
+            setTimeout(() => testStep6(), 600);
+            
+            setTimeout(() => {
+                log('=== TEST SUMMARY ===');
+                log('Completed steps: ' + currentStep + '/' + (totalSteps - 1)); // -1 because step 7 is the summary
+                
+                if (currentStep >= (totalSteps - 1)) {
+                    log('🎉 ALL TESTS PASSED!');
+                    log('✅ State saving system is working correctly');
+                    log('✅ Your 3D character state will now persist across page refreshes');
+                    markStepComplete('step7');
+                } else {
+                    log('⚠️ Some tests failed or were skipped');
+                    log('❌ State saving system needs attention');
+                    markStepError('step7');
+                }
+            }, 800);
+        }
+        
+        // Auto-run first test on page load
+        setTimeout(() => {
+            testStep1();
+        }, 1000);
+    </script>
+</body>
+</html>

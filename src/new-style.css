@@ -301,6 +301,22 @@ header p {
   transform: scale(1.2);
 }
 
+.settings-panel input[type="color"] {
+  width: 40px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.settings-panel select {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.9em;
+}
+
 /* Message Toast */
 .message-toast {
   position: fixed;

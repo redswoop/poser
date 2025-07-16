@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scale & Opacity Test - Poser3D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        
+        .test-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #444;
+        }
+        
+        .fix-panel {
+            background-color: #0d7377;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 2px solid #14a085;
+        }
+        
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background-color: #106ebe;
+        }
+        
+        .output {
+            background-color: #000;
+            color: #0f0;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .instructions {
+            background-color: #0078d4;
+            color: white;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        
+        .step {
+            background-color: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border-left: 4px solid #0078d4;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Scale & Opacity Fix Test</h1>
+    
+    <div class="fix-panel">
+        <h2>✅ Fix Applied</h2>
+        <p>The model scale and opacity restoration issue has been fixed. The system now properly preserves settings when loading from saved state.</p>
+        <p><strong>Changes made:</strong></p>
+        <ul>
+            <li>Modified <code>loadModelFromPath</code> to support preserving settings</li>
+            <li>Updated state loading to use preserved settings mode</li>
+            <li>Added timing delays to ensure model is fully loaded before applying settings</li>
+            <li>Enhanced logging to verify settings are applied correctly</li>
+        </ul>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🧪 How to Test the Fix</h2>
+        <div class="instructions">
+            <h3>Step-by-Step Test:</h3>
+            <ol>
+                <li>Go to <a href="http://localhost:5173" target="_blank">the main app</a></li>
+                <li>Load a 3D model using the "Load Model" button</li>
+                <li>Adjust the <strong>Model Scale</strong> slider (e.g., set to 0.5 or 1.5)</li>
+                <li>Adjust the <strong>Model Opacity</strong> slider (e.g., set to 0.5 or 0.8)</li>
+                <li>Pose the character in bone control mode</li>
+                <li><strong>Refresh the page</strong> (F5 or Ctrl+R)</li>
+                <li>Verify that the model loads with the same scale and opacity you set</li>
+            </ol>
+        </div>
+        
+        <div class="step">
+            <h3>Expected Behavior:</h3>
+            <ul>
+                <li>✅ Model should load with the same scale you set</li>
+                <li>✅ Model should load with the same opacity you set</li>
+                <li>✅ Model should maintain the same pose</li>
+                <li>✅ Camera position should be preserved</li>
+                <li>✅ UI sliders should show the correct values</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>📊 Test Current State</h2>
+        <button onclick="testScaleOpacity()">🔍 Test Scale & Opacity</button>
+        <button onclick="showDetailedState()">📋 Show Detailed State</button>
+        <button onclick="clearAndRetest()">🔄 Clear & Retest</button>
+        <div class="output" id="testOutput"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🐛 Debug Info</h2>
+        <p>Check the browser console for detailed logging when the page loads. You should see:</p>
+        <ul>
+            <li><code>📥 === LOAD SAVED STATE CALLED ===</code></li>
+            <li><code>🎛️ Applying saved model settings: {...}</code></li>
+            <li><code>✅ Settings applied. Current renderer settings: {...}</code></li>
+        </ul>
+    </div>
+
+    <script>
+        function log(message) {
+            const output = document.getElementById('testOutput');
+            output.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function testScaleOpacity() {
+            const output = document.getElementById('testOutput');
+            output.textContent = '';
+            
+            log('🔍 Testing scale and opacity state...');
+            
+            try {
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    
+                    if (state.modelSettings) {
+                        log('✅ Found model settings in saved state:');
+                        log('  Scale: ' + (state.modelSettings.modelScale || 'not set'));
+                        log('  Opacity: ' + (state.modelSettings.modelOpacity || 'not set'));
+                        log('  Show Model: ' + (state.modelSettings.showModel || 'not set'));
+                        log('  Wireframe: ' + (state.modelSettings.wireframe || 'not set'));
+                        
+                        // Check if these are reasonable values
+                        if (state.modelSettings.modelScale !== undefined && state.modelSettings.modelScale !== 1.0) {
+                            log('✅ Custom scale detected: ' + state.modelSettings.modelScale);
+                        }
+                        
+                        if (state.modelSettings.modelOpacity !== undefined && state.modelSettings.modelOpacity !== 1.0) {
+                            log('✅ Custom opacity detected: ' + state.modelSettings.modelOpacity);
+                        }
+                        
+                        log('');
+                        log('🎯 After refreshing the page, the model should load with these settings');
+                        
+                    } else {
+                        log('⚠️ No model settings found in saved state');
+                        log('ℹ️ Load a model and adjust scale/opacity to create settings');
+                    }
+                } else {
+                    log('❌ No saved state found');
+                    log('ℹ️ Go to the main app and load a model first');
+                }
+                
+            } catch (error) {
+                log('❌ Error testing state: ' + error.message);
+            }
+        }
+        
+        function showDetailedState() {
+            const output = document.getElementById('testOutput');
+            output.textContent = '';
+            
+            try {
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    log('📊 Complete saved state:');
+                    log('');
+                    log(JSON.stringify(state, null, 2));
+                } else {
+                    log('❌ No saved state found');
+                }
+                
+            } catch (error) {
+                log('❌ Error showing state: ' + error.message);
+            }
+        }
+        
+        function clearAndRetest() {
+            try {
+                localStorage.removeItem('poser3d-simple-state');
+                log('🗑️ Cleared saved state');
+                log('');
+                log('🔄 To retest:');
+                log('1. Go to the main app');
+                log('2. Load a model');
+                log('3. Adjust scale and opacity');
+                log('4. Refresh the page');
+                log('5. Verify settings are preserved');
+                
+            } catch (error) {
+                log('❌ Error clearing state: ' + error.message);
+            }
+        }
+        
+        // Auto-run test on page load
+        setTimeout(() => {
+            testScaleOpacity();
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import type { UndoAction, AppState } from './types';
+import type { UndoAction } from './types';
 
 export class UndoRedoManager {
   private history: UndoAction[] = [];
@@ -9,8 +9,8 @@ export class UndoRedoManager {
   public saveState(
     type: UndoAction['type'],
     description: string,
-    beforeState: AppState,
-    afterState: AppState
+    beforeState: any,
+    afterState: any
   ): void {
     // Create the action
     const action: UndoAction = {
@@ -46,7 +46,7 @@ export class UndoRedoManager {
     return this.currentIndex < this.history.length - 1;
   }
 
-  public undo(): AppState | null {
+  public undo(): any {
     if (!this.canUndo()) return null;
 
     const action = this.history[this.currentIndex];
@@ -56,7 +56,7 @@ export class UndoRedoManager {
     return this.deepCloneState(action.beforeState);
   }
 
-  public redo(): AppState | null {
+  public redo(): any {
     if (!this.canRedo()) return null;
 
     this.currentIndex++;
@@ -74,7 +74,7 @@ export class UndoRedoManager {
     return this.currentIndex;
   }
 
-  public jumpToAction(actionId: string): AppState | null {
+  public jumpToAction(actionId: string): any {
     const actionIndex = this.history.findIndex(action => action.id === actionId);
     if (actionIndex === -1) return null;
 
@@ -98,15 +98,47 @@ export class UndoRedoManager {
     return `${action.description} (${date.toLocaleTimeString()})`;
   }
 
-  private deepCloneState(state: AppState): AppState {
-    return {
-      characters: state.characters.map(char => ({
-        ...char,
-        keypoints: { ...char.keypoints }
-      })),
-      selectedCharacterId: state.selectedCharacterId,
-      selectedJoint: state.selectedJoint,
-      nextCharacterId: state.nextCharacterId
-    };
+  private deepCloneState(state: any): any {
+    // Handle new simplified bone rotation state structure
+    if (state.boneRotations) {
+      return {
+        boneRotations: this.deepCloneBoneRotations(state.boneRotations),
+        timestamp: state.timestamp
+      };
+    }
+    
+    // Handle legacy AppState structure (for backward compatibility)
+    if (state.characters) {
+      return {
+        characters: state.characters.map((char: any) => ({
+          ...char,
+          keypoints: { ...char.keypoints }
+        })),
+        selectedCharacterId: state.selectedCharacterId,
+        selectedJoint: state.selectedJoint,
+        nextCharacterId: state.nextCharacterId
+      };
+    }
+    
+    // Fallback: return a shallow copy
+    return { ...state };
+  }
+
+  private deepCloneBoneRotations(boneRotations: Record<string, any>): Record<string, any> {
+    const cloned: Record<string, any> = {};
+    
+    for (const [boneName, rotation] of Object.entries(boneRotations)) {
+      if (rotation && typeof rotation === 'object' && rotation.clone) {
+        // Handle THREE.Euler objects
+        cloned[boneName] = rotation.clone();
+      } else if (rotation && typeof rotation === 'object') {
+        // Handle plain objects with x, y, z properties
+        cloned[boneName] = { ...rotation };
+      } else {
+        cloned[boneName] = rotation;
+      }
+    }
+    
+    return cloned;
   }
 }

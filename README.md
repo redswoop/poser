@@ -14,6 +14,30 @@ A sophisticated 3D stick figure posing application built with Three.js, TypeScri
 - **Modern UI**: Collapsible panels, intuitive controls, and responsive design
 - **Real-time Updates**: See changes immediately as you manipulate joints
 
+### 🎭 Mesh Rendering System
+
+- **Realistic Human Mesh**: Overlay a 3D human mesh over the skeleton for more realistic visualization
+- **glTF/GLB Model Support**: Load professional 3D human models from Mixamo or other sources
+- **Render Mode Options**: 
+  - Both Mesh & Skeleton (default)
+  - Mesh Only (clean humanoid appearance)
+  - Skeleton Only (traditional stick figure)
+- **Customizable Appearance**:
+  - Adjustable mesh opacity (0.1 to 1.0)
+  - Skin color picker
+  - Clothing color picker
+  - Mesh quality settings (low/medium/high)
+- **3D Model Controls**:
+  - Load custom glTF/GLB files
+  - Adjustable model opacity and scale
+  - Toggle model visibility
+- **Anatomical Features**:
+  - Realistic torso with chest and waist sections
+  - Proportional head and neck
+  - Tapered limbs (arms and legs)
+  - Hands and feet
+  - Proper joint connections and deformation
+
 ## 💾 Auto-Save & State Persistence
 
 The app automatically saves your work to browser localStorage, including:

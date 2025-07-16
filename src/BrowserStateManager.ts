@@ -1,4 +1,5 @@
-import type { Character, AppState, SceneSettings } from './types';
+import type { Character, AppState, SceneSettings, GLTFModelSettings } from './types';
+import * as THREE from 'three';
 
 export interface CameraState {
   position: { x: number; y: number; z: number };
@@ -11,6 +12,8 @@ export interface FullAppState extends AppState {
   sceneSettings: SceneSettings;
   timestamp: number;
   version: string;
+  currentModelPath?: string;
+  modelSettings?: GLTFModelSettings;
 }
 
 export class BrowserStateManager {
@@ -48,7 +51,9 @@ export class BrowserStateManager {
     selectedJoint: string | null,
     nextCharacterId: number,
     cameraState: CameraState,
-    sceneSettings: SceneSettings
+    sceneSettings: SceneSettings,
+    currentModelPath?: string,
+    modelSettings?: GLTFModelSettings
   ): void {
     try {
       const fullState: FullAppState = {
@@ -59,7 +64,9 @@ export class BrowserStateManager {
         cameraState: { ...cameraState },
         sceneSettings: { ...sceneSettings },
         timestamp: Date.now(),
-        version: BrowserStateManager.VERSION
+        version: BrowserStateManager.VERSION,
+        currentModelPath,
+        modelSettings: modelSettings ? { ...modelSettings } : undefined
       };
 
       const serialized = JSON.stringify(fullState);
@@ -190,7 +197,10 @@ export class BrowserStateManager {
       typeof state.sceneSettings.jointSize === 'number' &&
       typeof state.sceneSettings.gridVisible === 'boolean' &&
       typeof state.timestamp === 'number' &&
-      typeof state.version === 'string'
+      typeof state.version === 'string' &&
+      // New fields are optional for backwards compatibility
+      (state.currentModelPath === undefined || typeof state.currentModelPath === 'string') &&
+      (state.modelSettings === undefined || typeof state.modelSettings === 'object')
     );
   }
 
@@ -200,7 +210,9 @@ export class BrowserStateManager {
       name: char.name,
       color: char.color,
       visible: char.visible,
-      keypoints: this.deepCloneKeypoints(char.keypoints)
+      keypoints: this.deepCloneKeypoints(char.keypoints),
+      modelPath: char.modelPath,
+      boneRotations: char.boneRotations ? this.deepCloneBoneRotations(char.boneRotations) : undefined
     }));
   }
 
@@ -211,6 +223,20 @@ export class BrowserStateManager {
         x: Number(value.x),
         y: Number(value.y),
         z: Number(value.z)
+      };
+    }
+    return cloned;
+  }
+
+  private deepCloneBoneRotations(boneRotations: Record<string, THREE.Euler>): Record<string, any> {
+    const cloned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(boneRotations)) {
+      // Convert THREE.Euler to plain object for JSON serialization
+      cloned[key] = {
+        x: value.x,
+        y: value.y,
+        z: value.z,
+        order: value.order
       };
     }
     return cloned;

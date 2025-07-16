@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { SceneSettings, GLTFModelSettings } from './types';
+import type { SceneSettings } from './types';
 import { GLTFHumanRenderer } from './GLTFHumanRenderer';
 
 export class ThreeRenderer {
@@ -64,12 +64,6 @@ export class ThreeRenderer {
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    
-    // Improve lighting and color rendering
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
-    
     this.container.appendChild(this.renderer.domElement);
 
     // Grid
@@ -78,32 +72,22 @@ export class ThreeRenderer {
   }
 
   private setupLighting(): void {
-    // Ambient light - increased for better overall illumination
-    const ambientLight = new THREE.AmbientLight(0x404040, 1.2);
+    // Ambient light
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
     this.scene.add(ambientLight);
 
-    // Main directional light - increased intensity
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    // Directional light
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(10, 10, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
     directionalLight.shadow.mapSize.height = 2048;
     this.scene.add(directionalLight);
 
-    // Secondary directional light from opposite side for fill lighting
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight2.position.set(-10, 10, -5);
-    this.scene.add(directionalLight2);
-
-    // Point light for additional fill
-    const pointLight = new THREE.PointLight(0xffffff, 0.6);
+    // Point light for fill
+    const pointLight = new THREE.PointLight(0xffffff, 0.3);
     pointLight.position.set(-10, 10, -5);
     this.scene.add(pointLight);
-    
-    // Additional point light from the front
-    const frontLight = new THREE.PointLight(0xffffff, 0.4);
-    frontLight.position.set(0, 5, 10);
-    this.scene.add(frontLight);
   }
 
   private setupControls(): void {
@@ -140,17 +124,12 @@ export class ThreeRenderer {
     // Set up raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Get all bone control objects that are visible
+    // Get all bone control objects
     const controls = this.gltfRenderer.boneController.controls;
-    const visibleControls = controls.children.filter(child => child.visible);
-    
-    // For objects with depthTest: false, we need to sort intersections by distance
-    const intersects = this.raycaster.intersectObjects(visibleControls, false);
+    const intersects = this.raycaster.intersectObjects(controls.children, true);
 
     if (intersects.length > 0) {
-      // Get the closest intersection
-      const closestIntersect = intersects[0];
-      const control = closestIntersect.object;
+      const control = intersects[0].object;
       const bone = this.gltfRenderer.boneController.getBoneFromControl(control);
       if (bone) {
         return { bone, control };
@@ -272,8 +251,8 @@ export class ThreeRenderer {
     return this.gltfRenderer.boneController;
   }
 
-  public getBoneRotations(): Record<string, THREE.Euler> {
-    const rotations: Record<string, THREE.Euler> = {};
+  public getBonePositions(): Record<string, THREE.Vector3> {
+    const positions: Record<string, THREE.Vector3> = {};
     
     if (this.boneControlMode && this.gltfRenderer?.boneController) {
       const controls = this.gltfRenderer.boneController.controls;
@@ -281,28 +260,28 @@ export class ThreeRenderer {
       controls.children.forEach(control => {
         const bone = this.gltfRenderer!.boneController!.getBoneFromControl(control);
         if (bone) {
-          rotations[bone.name] = bone.rotation.clone();
+          positions[bone.name] = bone.position.clone();
         }
       });
     }
     
-    return rotations;
+    return positions;
   }
 
-  public setBoneRotations(rotations: Record<string, THREE.Euler>): void {
+  public setBonePositions(positions: Record<string, THREE.Vector3>): void {
     if (this.boneControlMode && this.gltfRenderer?.boneController) {
-      Object.entries(rotations).forEach(([boneName, rotation]) => {
+      Object.entries(positions).forEach(([boneName, position]) => {
         const controls = this.gltfRenderer!.boneController!.controls;
         
         controls.children.forEach(control => {
           const bone = this.gltfRenderer!.boneController!.getBoneFromControl(control);
           if (bone && bone.name === boneName) {
-            bone.rotation.copy(rotation);
+            bone.position.copy(position);
           }
         });
       });
       
-      // Update the bone controller after setting rotations
+      // Update the bone controller after setting positions
       this.updateBoneController();
     }
   }
@@ -311,79 +290,6 @@ export class ThreeRenderer {
     if (this.boneControlMode && this.gltfRenderer.boneController) {
       this.gltfRenderer.boneController.update();
     }
-  }
-
-  public setBoneDepthLimit(depthLimit: number): void {
-    if (this.gltfRenderer?.boneController) {
-      this.gltfRenderer.boneController.setDepthLimit(depthLimit);
-    }
-  }
-
-  public getBoneDepthLimit(): number {
-    if (this.gltfRenderer?.boneController) {
-      return this.gltfRenderer.boneController.getDepthLimit();
-    }
-    return 3; // Default value
-  }
-
-  public getMaxBoneDepth(): number {
-    if (this.gltfRenderer?.boneController) {
-      return this.gltfRenderer.boneController.getMaxDepth();
-    }
-    return 10; // Default value
-  }
-
-  public getBoneDepths(): Map<string, number> {
-    if (this.gltfRenderer?.boneController) {
-      return this.gltfRenderer.boneController.getBoneDepths();
-    }
-    return new Map();
-  }
-
-  public getBoneByName(boneName: string): THREE.Bone | null {
-    if (this.boneControlMode && this.gltfRenderer?.boneController) {
-      const controls = this.gltfRenderer.boneController.controls;
-      
-      for (const control of controls.children) {
-        const bone = this.gltfRenderer.boneController.getBoneFromControl(control);
-        if (bone && bone.name === boneName) {
-          return bone;
-        }
-      }
-    }
-    return null;
-  }
-
-  public highlightBoneControl(boneName: string | null): void {
-    if (this.boneControlMode && this.gltfRenderer?.boneController) {
-      const controls = this.gltfRenderer.boneController.controls;
-      
-      controls.children.forEach(control => {
-        const bone = this.gltfRenderer!.boneController!.getBoneFromControl(control);
-        if (bone) {
-          const material = (control as THREE.Mesh).material as THREE.MeshBasicMaterial;
-          if (boneName && bone.name === boneName) {
-            // Highlight selected joint
-            material.color.setHex(0x00ff00); // Green for selected
-            material.opacity = 1.0; // Full opacity for selected
-            (control as THREE.Mesh).renderOrder = 1001; // Even higher render order
-          } else {
-            // Default color for non-selected joints
-            material.color.setHex(0xff0000); // Red for default
-            material.opacity = 0.8; // Semi-transparent for default
-            (control as THREE.Mesh).renderOrder = 1000; // Standard render order
-          }
-        }
-      });
-    }
-  }
-
-  public getGLTFSettings(): GLTFModelSettings {
-    return this.gltfRenderer.getSettings();
-  }
-
-  public getSettings(): SceneSettings {
-    return { ...this.settings };
   }
 
   private animate(): void {

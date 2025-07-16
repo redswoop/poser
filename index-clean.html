@@ -15,9 +15,6 @@
       
       <div class="toolbar">
         <button id="reset-camera">🎥 Reset Camera</button>
-        <button id="export-character">💾 Export Character</button>
-        <button id="import-character">📂 Import Character</button>
-        <input type="file" id="import-file" accept=".json" style="display: none;">
       </div>
       
       <div class="camera-controls">
@@ -42,41 +39,7 @@
           </div>
         </div>
         
-        <!-- Compact Selection Box Below Scene -->
-        <div class="selection-box-container">
-          <div class="compact-selection-box" id="compact-selection-box">
-            <div class="selection-header">
-              <strong>Selected Joint:</strong>
-              <span id="selected-joint-name-compact">None</span>
-              <button id="reset-joint-btn-compact" class="reset-btn" style="display: none;">Reset</button>
-            </div>
-            <div class="selection-details" id="selection-details" style="display: none;">
-              <div class="detail-group">
-                <span class="detail-label">Position:</span>
-                <span class="detail-values">
-                  X: <span id="position-x-compact">0.00</span>
-                  Y: <span id="position-y-compact">0.00</span>
-                  Z: <span id="position-z-compact">0.00</span>
-                </span>
-              </div>
-              <div class="detail-group">
-                <span class="detail-label">Rotation:</span>
-                <span class="detail-values">
-                  X: <span id="rotation-x-compact">0.00°</span>
-                  Y: <span id="rotation-y-compact">0.00°</span>
-                  Z: <span id="rotation-z-compact">0.00°</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
         <div class="controls">
-          <!-- User Instructions -->
-          <div class="instruction-panel">
-            <p><strong>💡 Tip:</strong> Click on any red joint control to select it. Details will appear below the scene.</p>
-          </div>
-          
           <div class="settings-panel">
             <h3 class="collapsible-header" id="settings-header">
               <span>Settings</span>
@@ -108,13 +71,8 @@
                 </div>
                 <div class="setting-row">
                   <label for="model-scale">Model Scale</label>
-                  <input type="range" id="model-scale" min="0.1" max="5" step="0.1" value="1.0">
+                  <input type="range" id="model-scale" min="0.1" max="5" step="0.1" value="1">
                   <span class="value-display">1.0</span>
-                </div>
-                <div class="setting-row">
-                  <label for="bone-depth-limit">Bone Control Depth</label>
-                  <input type="range" id="bone-depth-limit" min="0" max="10" step="1" value="3">
-                  <span class="value-display">3</span>
                 </div>
               </div>
             </div>

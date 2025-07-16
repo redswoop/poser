@@ -12,6 +12,8 @@ export interface Character {
   color: string;
   visible: boolean;
   keypoints: Record<string, Keypoint>;
+  modelPath?: string;
+  boneRotations?: Record<string, { x: number; y: number; z: number; order: string }>;
 }
 
 export interface BoneConnection {
@@ -33,6 +35,22 @@ export interface SceneSettings {
   boneThickness: number;
   jointSize: number;
   gridVisible: boolean;
+}
+
+export interface MeshSettings {
+  showMesh: boolean;
+  showSkeleton: boolean;
+  meshOpacity: number;
+  skinColor: number;
+  clothingColor: number;
+  meshQuality: 'low' | 'medium' | 'high';
+}
+
+export interface GLTFModelSettings {
+  showModel: boolean;
+  modelOpacity: number;
+  modelScale: number;
+  modelPath: string;
 }
 
 export interface RaycastResult {
@@ -61,6 +79,8 @@ export interface AppState {
   selectedCharacterId: number | null;
   selectedJoint: string | null;
   nextCharacterId: number;
+  currentModelPath?: string;
+  currentModelSettings?: GLTFModelSettings;
 }
 
 export interface UndoRedoManager {

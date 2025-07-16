@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎭 Auto-Loading GLB Model Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .code {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .steps {
+            background-color: #f1f8e9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .steps ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .steps li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Auto-Loading GLB Model</h1>
+        
+        <div class="success">
+            <h2>✅ Auto-Loading Setup Complete</h2>
+            <p>The app now automatically loads <strong>womenfemale_body_base_rigged.glb</strong> when it starts!</p>
+        </div>
+
+        <div class="instructions">
+            <h2>📋 What Happens Now</h2>
+            <ul>
+                <li>🚀 <strong>App starts</strong> → Automatically loads the GLB model</li>
+                <li>🦴 <strong>Skeleton extracted</strong> → Creates joints for each bone</li>
+                <li>🎯 <strong>Character created</strong> → Ready to pose immediately</li>
+                <li>✅ <strong>GLTF model enabled</strong> → Checkbox automatically checked</li>
+                <li>🎭 <strong>Ready to use</strong> → Start posing right away!</li>
+            </ul>
+        </div>
+
+        <div class="steps">
+            <h2>🧪 Expected Behavior</h2>
+            <ol>
+                <li><strong>Refresh the page</strong> - The GLB model should load automatically</li>
+                <li><strong>Check the console</strong> - Look for auto-loading messages</li>
+                <li><strong>See the character</strong> - Joints should appear based on the model's skeleton</li>
+                <li><strong>GLTF checkbox</strong> - Should be automatically checked</li>
+                <li><strong>Start posing</strong> - Move joints to see the model animate</li>
+            </ol>
+        </div>
+
+        <div class="code">
+            <strong>Expected Console Output:</strong><br>
+            🎭 Loading default GLB model...<br>
+            ✅ Model has skeleton with X bones<br>
+            🎯 Extracted X joints from skeleton<br>
+            ✅ Created character with X joints from GLB skeleton<br>
+            ✅ Default GLB model loaded successfully<br>
+        </div>
+
+        <div class="highlight">
+            <h2>🎯 File Location</h2>
+            <p>The GLB model is now in: <code>public/womenfemale_body_base_rigged.glb</code></p>
+            <p>This allows it to be served by Vite and loaded automatically.</p>
+        </div>
+        
+        <div class="instructions">
+            <h2>🔧 How It Works</h2>
+            <ul>
+                <li>App initializes all systems</li>
+                <li>After 100ms delay, loads the GLB model from <code>/womenfemale_body_base_rigged.glb</code></li>
+                <li>Extracts skeleton bones and creates corresponding joints</li>
+                <li>Creates a character with the extracted joint structure</li>
+                <li>Enables GLTF model display automatically</li>
+                <li>Ready to pose immediately!</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

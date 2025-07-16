@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bone Depth Control Test - Poser3D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        
+        .feature-panel {
+            background-color: #0d7377;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 2px solid #14a085;
+        }
+        
+        .test-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #444;
+        }
+        
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background-color: #106ebe;
+        }
+        
+        .output {
+            background-color: #000;
+            color: #0f0;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .instructions {
+            background-color: #0078d4;
+            color: white;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        
+        .depth-example {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .depth-level {
+            padding: 5px;
+            margin: 3px 0;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        .depth-0 { background-color: #ff6b6b; }
+        .depth-1 { background-color: #4ecdc4; }
+        .depth-2 { background-color: #45b7d1; }
+        .depth-3 { background-color: #f9ca24; }
+        .depth-4 { background-color: #f0932b; }
+        .depth-5 { background-color: #eb4d4b; }
+        .depth-6 { background-color: #6c5ce7; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Bone Depth Control - NEW FEATURE!</h1>
+    
+    <div class="feature-panel">
+        <h2>✨ New Feature: Hierarchical Bone Control Visibility</h2>
+        <p>You can now control which bone controls are visible based on their depth in the skeleton hierarchy!</p>
+        <ul>
+            <li>🎯 <strong>Depth 0-2:</strong> Main body controls (hips, spine, shoulders)</li>
+            <li>🎯 <strong>Depth 3-4:</strong> Limb controls (arms, legs, head)</li>
+            <li>🎯 <strong>Depth 5+:</strong> Detail controls (fingers, toes, face)</li>
+        </ul>
+        <p>Use the <strong>"Bone Control Depth"</strong> slider in the main app to hide/show controls!</p>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🧪 How to Test the Depth Feature</h2>
+        <div class="instructions">
+            <h3>Step-by-Step Test:</h3>
+            <ol>
+                <li>Go to <a href="http://localhost:5173" target="_blank">the main app</a></li>
+                <li>Load a 3D model using the "Load Model" button</li>
+                <li>Enter bone control mode to see the red control spheres</li>
+                <li>Find the <strong>"Bone Control Depth"</strong> slider in the settings panel</li>
+                <li>Start with depth 2 - you should see only main body controls</li>
+                <li>Gradually increase to depth 3, 4, 5... to reveal more detailed controls</li>
+                <li>Notice how finger and face controls appear at higher depths</li>
+            </ol>
+        </div>
+        
+        <div class="depth-example">
+            <h3>Typical Bone Hierarchy:</h3>
+            <div class="depth-level depth-0">Depth 0: Root/Hips</div>
+            <div class="depth-level depth-1">Depth 1: Spine, Left/Right Hip</div>
+            <div class="depth-level depth-2">Depth 2: Chest, Left/Right Thigh</div>
+            <div class="depth-level depth-3">Depth 3: Neck, Left/Right Shoulder, Left/Right Calf</div>
+            <div class="depth-level depth-4">Depth 4: Head, Left/Right Arm, Left/Right Foot</div>
+            <div class="depth-level depth-5">Depth 5: Left/Right Forearm, Left/Right Hand</div>
+            <div class="depth-level depth-6">Depth 6+: Fingers, Toes, Face details</div>
+        </div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>📊 Current Depth Analysis</h2>
+        <button onclick="analyzeDepths()">🔍 Analyze Bone Depths</button>
+        <button onclick="showDepthState()">📋 Show Depth State</button>
+        <div class="output" id="depthOutput"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🎮 Expected Behavior</h2>
+        <ul>
+            <li>✅ <strong>Depth 0-2:</strong> Basic posing - main body structure visible</li>
+            <li>✅ <strong>Depth 3-4:</strong> Standard posing - limbs and head controls visible</li>
+            <li>✅ <strong>Depth 5+:</strong> Detail work - finger and face controls visible</li>
+            <li>✅ <strong>Slider remembers setting:</strong> Depth limit persists across page refreshes</li>
+            <li>✅ <strong>Dynamic range:</strong> Slider max adjusts to actual bone hierarchy</li>
+        </ul>
+    </div>
+    
+    <div class="test-panel">
+        <h2>💡 Usage Tips</h2>
+        <ul>
+            <li>Start with depth 2-3 for basic character posing</li>
+            <li>Increase to depth 4-5 for arm and leg positioning</li>
+            <li>Use depth 6+ only when you need finger/face detail</li>
+            <li>Lower depth = less clutter, easier to work with main pose</li>
+            <li>Higher depth = more control, but more visual complexity</li>
+        </ul>
+    </div>
+
+    <script>
+        function log(message) {
+            const output = document.getElementById('depthOutput');
+            output.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function analyzeDepths() {
+            const output = document.getElementById('depthOutput');
+            output.textContent = '';
+            
+            log('🔍 Analyzing bone depth configuration...');
+            
+            try {
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    
+                    // Check if depth limit is saved
+                    if (state.boneDepthLimit !== undefined) {
+                        log('✅ Found saved depth limit: ' + state.boneDepthLimit);
+                    } else {
+                        log('⚠️ No depth limit found in saved state');
+                    }
+                    
+                    // Analyze bone rotations to understand hierarchy
+                    if (state.boneRotations) {
+                        log('📊 Analyzing bone hierarchy from saved rotations:');
+                        
+                        const boneNames = Object.keys(state.boneRotations);
+                        log('Total bones: ' + boneNames.length);
+                        
+                        // Group bones by common patterns
+                        const patterns = {
+                            'Root/Hips': boneNames.filter(name => name.includes('Hips')),
+                            'Spine': boneNames.filter(name => name.includes('Spine')),
+                            'Arms': boneNames.filter(name => name.includes('Arm') || name.includes('Shoulder')),
+                            'Hands': boneNames.filter(name => name.includes('Hand') || name.includes('Finger')),
+                            'Legs': boneNames.filter(name => name.includes('Leg') || name.includes('Thigh') || name.includes('Calf')),
+                            'Feet': boneNames.filter(name => name.includes('Foot') || name.includes('Toe')),
+                            'Head': boneNames.filter(name => name.includes('Head') || name.includes('Neck')),
+                            'Face': boneNames.filter(name => name.includes('Eye') || name.includes('Jaw') || name.includes('Nose'))
+                        };
+                        
+                        Object.entries(patterns).forEach(([category, bones]) => {
+                            if (bones.length > 0) {
+                                log(`  ${category}: ${bones.length} bones`);
+                                bones.slice(0, 3).forEach(bone => log(`    - ${bone}`));
+                                if (bones.length > 3) log(`    ... and ${bones.length - 3} more`);
+                            }
+                        });
+                    }
+                    
+                } else {
+                    log('❌ No saved state found');
+                    log('ℹ️ Load a model in the main app to analyze bone hierarchy');
+                }
+                
+            } catch (error) {
+                log('❌ Error analyzing depths: ' + error.message);
+            }
+        }
+        
+        function showDepthState() {
+            const output = document.getElementById('depthOutput');
+            output.textContent = '';
+            
+            try {
+                const savedState = localStorage.getItem('poser3d-simple-state');
+                
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    
+                    log('📋 Current depth configuration:');
+                    log('');
+                    log('Depth Limit: ' + (state.boneDepthLimit || 'not set'));
+                    log('Timestamp: ' + new Date(state.timestamp).toLocaleString());
+                    log('Model: ' + (state.modelPath || 'none'));
+                    log('');
+                    
+                    if (state.boneRotations) {
+                        log('Available bones: ' + Object.keys(state.boneRotations).length);
+                        log('');
+                        log('Sample bones:');
+                        Object.keys(state.boneRotations).slice(0, 10).forEach(bone => {
+                            log('  ' + bone);
+                        });
+                    }
+                    
+                } else {
+                    log('❌ No saved state found');
+                }
+                
+            } catch (error) {
+                log('❌ Error showing depth state: ' + error.message);
+            }
+        }
+        
+        // Auto-run analysis on page load
+        setTimeout(() => {
+            analyzeDepths();
+        }, 1000);
+    </script>
+</body>
+</html>

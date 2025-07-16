@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🎭 New Joint System Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .test-steps {
+            background-color: #f1f8e9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .test-steps ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .test-steps li {
+            margin-bottom: 10px;
+        }
+        .code {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 New Joint-Based System</h1>
+        
+        <div class="success">
+            <h2>✅ Major System Improvement</h2>
+            <p>The system now dynamically creates joints based on the GLB model's skeleton structure!</p>
+        </div>
+
+        <div class="instructions">
+            <h2>📋 What Changed</h2>
+            <ul>
+                <li>🦴 <strong>Dynamic Joint Creation:</strong> When you load a GLB model, the system extracts all bones and creates corresponding joints</li>
+                <li>🎯 <strong>Perfect 1:1 Mapping:</strong> Each bone in the GLB maps directly to a joint in the interface</li>
+                <li>📏 <strong>Proper Scaling:</strong> Model stays at original size since we're using its native bone structure</li>
+                <li>🎮 <strong>Flexible Support:</strong> Works with any rigged model - 5 joints, 50 joints, or 500 joints</li>
+                <li>🔄 <strong>Real-time Updates:</strong> Moving any joint immediately affects the corresponding bone</li>
+            </ul>
+        </div>
+
+        <div class="test-steps">
+            <h2>🧪 How to Test the New System</h2>
+            <ol>
+                <li><strong>Load a GLB Model:</strong> Use the "Load 3D Model" button to select a rigged GLB file</li>
+                <li><strong>Watch the Console:</strong> You'll see messages about bone extraction</li>
+                <li><strong>Check the Keypoints Panel:</strong> New joints will appear for each bone in the model</li>
+                <li><strong>Move the Joints:</strong> Each joint corresponds exactly to a bone in the model</li>
+                <li><strong>Perfect Animation:</strong> The model will move exactly as you pose it!</li>
+            </ol>
+        </div>
+
+        <div class="code">
+            <strong>Expected Console Output:</strong><br>
+            ✅ Model has skeleton with 65 bones<br>
+            🎯 Extracted 65 joints from skeleton<br>
+            ✅ Created character with 65 joints from GLB skeleton<br>
+            🔄 Updating pose for character 1<br>
+            🎯 Positioned bone mixamorig:Hips at (0.00, 2.30, 0.00)<br>
+            🎯 Positioned bone mixamorig:LeftUpLeg at (-0.50, 2.30, 0.00)<br>
+            ...
+        </div>
+
+        <div class="highlight">
+            <h2>🎯 Key Benefits</h2>
+            <ul>
+                <li><strong>No More Size Issues:</strong> Model uses its native scale</li>
+                <li><strong>Perfect Bone Mapping:</strong> Every bone has a corresponding joint</li>
+                <li><strong>Universal Compatibility:</strong> Works with any rigged humanoid model</li>
+                <li><strong>Real-time Feedback:</strong> See exactly what bones are being controlled</li>
+                <li><strong>Professional Results:</strong> Animation matches professional rigging tools</li>
+            </ul>
+        </div>
+        
+        <div class="instructions">
+            <h2>🔧 Technical Details</h2>
+            <p>The system now:</p>
+            <ul>
+                <li>Extracts world positions of all bones from the GLB skeleton</li>
+                <li>Creates a character with keypoints matching each bone</li>
+                <li>Updates bone positions directly when joints are moved</li>
+                <li>Maintains perfect 1:1 correspondence between interface and model</li>
+                <li>Scales properly by using the model's native bone structure</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

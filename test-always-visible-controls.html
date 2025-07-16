@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Always-Visible Controls Test - Poser3D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        
+        .test-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #444;
+        }
+        
+        .fix-panel {
+            background-color: #0d7377;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 2px solid #14a085;
+        }
+        
+        .instructions {
+            background-color: #0078d4;
+            color: white;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        
+        .test-step {
+            background-color: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border-left: 4px solid #0078d4;
+        }
+        
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background-color: #106ebe;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Always-Visible Bone Controls Test</h1>
+    
+    <div class="fix-panel">
+        <h2>✅ Control Visibility Fix Applied</h2>
+        <p>The bone control points have been enhanced to always be visible, regardless of model geometry occlusion.</p>
+        <p><strong>Technical changes:</strong></p>
+        <ul>
+            <li><code>depthTest: false</code> - Controls ignore depth testing</li>
+            <li><code>depthWrite: false</code> - Controls don't write to depth buffer</li>
+            <li><code>renderOrder: 1000</code> - Controls render on top of model</li>
+            <li>Enhanced highlighting with opacity changes</li>
+        </ul>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🧪 How to Test</h2>
+        <div class="instructions">
+            <h3>Step-by-Step Test:</h3>
+            <ol>
+                <li>Go to <a href="http://localhost:5173" target="_blank">the main app</a></li>
+                <li>Load a 3D model using the "Load Model" button</li>
+                <li>Enter bone control mode to see red control spheres</li>
+                <li>Rotate the camera around the model</li>
+                <li>Watch the control points - they should ALWAYS be visible</li>
+                <li>Try different camera angles and zoom levels</li>
+                <li>The controls should never disappear behind the model</li>
+            </ol>
+        </div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🎯 Expected Behavior</h2>
+        
+        <div class="test-step">
+            <h3>Before Fix:</h3>
+            <ul>
+                <li>❌ Controls disappear when model geometry is in front</li>
+                <li>❌ Hard to interact with controls from certain angles</li>
+                <li>❌ Inconsistent visibility as camera rotates</li>
+            </ul>
+        </div>
+        
+        <div class="test-step">
+            <h3>After Fix:</h3>
+            <ul>
+                <li>✅ Controls are always visible regardless of camera angle</li>
+                <li>✅ Controls appear "projected" onto the view plane</li>
+                <li>✅ Consistent interaction from any viewpoint</li>
+                <li>✅ Selected control has enhanced visibility (green + full opacity)</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🔧 Visual Feedback Improvements</h2>
+        <ul>
+            <li><strong>Default Controls:</strong> Red spheres with 80% opacity</li>
+            <li><strong>Selected Control:</strong> Green sphere with 100% opacity</li>
+            <li><strong>Depth-Based Hiding:</strong> Controls still respect depth slider settings</li>
+            <li><strong>Render Order:</strong> Selected controls have highest priority</li>
+        </ul>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🔍 Additional Testing</h2>
+        <p>Try these specific scenarios:</p>
+        <ul>
+            <li>Load a model and zoom in very close to a body part</li>
+            <li>Rotate the camera to look "through" the model</li>
+            <li>Select different bone controls and verify highlighting works</li>
+            <li>Use the depth slider to hide/show controls at different levels</li>
+            <li>Verify that hidden controls (via depth) stay hidden</li>
+        </ul>
+    </div>
+    
+    <div class="test-panel">
+        <h2>💡 Technical Details</h2>
+        <p>The solution uses Three.js rendering properties:</p>
+        <ul>
+            <li><code>depthTest: false</code> - Disables depth buffer testing</li>
+            <li><code>depthWrite: false</code> - Prevents writing to depth buffer</li>
+            <li><code>renderOrder: 1000+</code> - Forces controls to render after model</li>
+            <li><code>DoubleSide</code> - Ensures spheres are visible from any angle</li>
+        </ul>
+        <p>This creates the effect of controls being "projected" onto the view plane while maintaining their 3D positions.</p>
+    </div>
+
+    <script>
+        // Auto-open main app for testing
+        setTimeout(() => {
+            if (confirm('Open the main app to test the always-visible controls?')) {
+                window.open('http://localhost:5173', '_blank');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
