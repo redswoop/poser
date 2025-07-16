@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Stick Figure Poser</title>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🎭 3D Stick Figure Poser</h1>
+        <p>Create and pose 3D stick figures with realistic bone constraints</p>
+      </header>
+      
+      <div class="toolbar">
+        <button id="add-character">Add Character</button>
+        <button id="clear-all">Clear All</button>
+        <button id="export-json">💾 Export JSON</button>
+        <button id="import-json">📁 Import JSON</button>
+        <button id="reset-camera">🎥 Reset Camera</button>
+        <input type="file" id="file-input" accept=".json" style="display: none;">
+      </div>
+      
+      <div class="camera-controls">
+        <span class="camera-label">Camera Views:</span>
+        <button id="view-front" class="view-btn">Front</button>
+        <button id="view-back" class="view-btn">Back</button>
+        <button id="view-left" class="view-btn">Left</button>
+        <button id="view-right" class="view-btn">Right</button>
+        <button id="view-top" class="view-btn">Top</button>
+        <button id="view-bottom" class="view-btn">Bottom</button>
+      </div>
+      
+      <div class="main-content">
+        <div class="canvas-container">
+          <div id="three-canvas"></div>
+          <div class="controls-overlay">
+            <div class="camera-info">
+              <small><strong>Camera:</strong> Left: Rotate | Middle: Pan | Right: Zoom</small><br>
+              <small><strong>Joint Movement:</strong> Default: XY | Shift: XZ | Shift+Ctrl: YZ</small>
+            </div>
+            <div id="plane-indicator" style="display: none;"></div>
+          </div>
+        </div>
+        
+        <div class="controls">
+          <div class="presets-panel">
+            <h3 class="collapsible-header" id="presets-header">
+              <span>Preset Poses</span>
+              <button class="collapse-btn" id="presets-toggle">▼</button>
+            </h3>
+            <div class="preset-buttons" id="preset-buttons-container">
+              <button class="preset-btn" data-preset="standing">Standing</button>
+              <button class="preset-btn" data-preset="walking">Walking</button>
+              <button class="preset-btn" data-preset="running">Running</button>
+              <button class="preset-btn" data-preset="jumping">Jumping</button>
+              <button class="preset-btn" data-preset="sitting">Sitting</button>
+              <button class="preset-btn" data-preset="tPose">T-Pose</button>
+            </div>
+          </div>
+          
+          <div class="character-list">
+            <h3 class="collapsible-header" id="characters-header">
+              <span>Characters</span>
+              <button class="collapse-btn" id="characters-toggle">▼</button>
+            </h3>
+            <div id="characters-container" class="collapsible-content"></div>
+          </div>
+          
+          <div class="keypoints-panel">
+            <h3 class="collapsible-header" id="keypoints-header">
+              <span>Keypoints</span>
+              <button class="collapse-btn collapsed" id="keypoints-toggle">▼</button>
+            </h3>
+            <div id="keypoints-container" class="collapsible-content collapsed">
+              <p>Select a character to edit keypoints</p>
+            </div>
+          </div>
+          
+          <div class="settings-panel">
+            <h3 class="collapsible-header" id="settings-header">
+              <span>3D Settings</span>
+              <button class="collapse-btn collapsed" id="settings-toggle">▼</button>
+            </h3>
+            <div id="settings-content" class="settings-content collapsible-content collapsed">
+              <div class="setting-item">
+                <label>Bone Thickness:</label>
+                <input type="range" id="bone-thickness" min="1" max="10" value="3">
+              </div>
+              <div class="setting-item">
+                <label>Joint Size:</label>
+                <input type="range" id="joint-size" min="0.05" max="0.5" step="0.05" value="0.15">
+              </div>
+              <div class="setting-item">
+                <label>Grid Visible:</label>
+                <input type="checkbox" id="grid-visible" checked>
+              </div>
+            </div>
+          </div>
+
+          <div class="undo-redo-panel">
+            <h3 class="collapsible-header" id="undo-redo-header">
+              <span>Undo/Redo</span>
+              <button class="collapse-btn" id="undo-redo-toggle">▼</button>
+            </h3>
+            <div class="undo-redo-content collapsible-content">
+              <div class="undo-redo-buttons">
+                <button id="undo-btn" title="Undo (Ctrl+Z / Cmd+Z)">↶ Undo</button>
+                <button id="redo-btn" title="Redo (Ctrl+Y / Cmd+Shift+Z)">↷ Redo</button>
+              </div>
+              <div class="history-panel">
+                <h4>Action History</h4>
+                <div id="history-list" class="history-list">
+                  <p class="no-history">No actions yet</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
