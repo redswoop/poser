@@ -3,6 +3,7 @@ import { CameraController } from './CameraController';
 import * as THREE from 'three';
 import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
+import { JointDetailBox } from './JointDetailBox';
 import type { SceneSettings, GLTFModelSettings } from './types';
 
 class StickFigureApp3D {
@@ -28,6 +29,7 @@ class StickFigureApp3D {
   // UI Elements
   private canvasContainer: HTMLElement;
   private cameraController: CameraController;
+  private jointDetailBox: JointDetailBox;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -44,11 +46,16 @@ class StickFigureApp3D {
       oldControls.parentNode.removeChild(oldControls);
     }
     this.cameraController = new CameraController();
-    // Insert the camera controller UI into the container
+    this.jointDetailBox = new JointDetailBox();
     const container = document.querySelector('.container');
-    if (container) {
+    const canvasContainer = container?.querySelector('.canvas-container');
+    if (container && canvasContainer) {
+      canvasContainer.insertAdjacentElement('afterend', this.jointDetailBox.rootElement);
       container.insertBefore(this.cameraController.rootElement, container.querySelector('.main-content'));
     }
+    this.jointDetailBox.rootElement.addEventListener('reset-joint', () => {
+      this.resetSelectedJoint();
+    });
 
     this.initializeRenderer();
     this.setupEventListeners();
@@ -442,6 +449,8 @@ class StickFigureApp3D {
         
         if (boneControlResult) {
           console.log(`🎯 Selected bone: ${boneControlResult.bone.name}`);
+          // Also select the joint so detail box shows and updates
+          this.selectJoint(boneControlResult.bone);
           
           // Save state for undo before starting drag
           this.dragStartState = this.getCurrentState();
@@ -564,9 +573,18 @@ class StickFigureApp3D {
           // Update bone controller
           this.renderer.updateBoneController();
           
-          // Update selection UI if a joint is selected
+          // Update joint detail box in real-time if the selected joint is being dragged
           if (this.selectedJoint && this.dragTarget && this.dragTarget.bone.name === this.selectedJoint) {
-            this.updateSelectionUI(this.dragTarget.bone);
+            // Compute world position
+            const worldPosition = new THREE.Vector3();
+            this.dragTarget.bone.getWorldPosition(worldPosition);
+            // Compute rotation in degrees
+            const rotation = {
+              x: this.dragTarget.bone.rotation.x * 180 / Math.PI,
+              y: this.dragTarget.bone.rotation.y * 180 / Math.PI,
+              z: this.dragTarget.bone.rotation.z * 180 / Math.PI,
+            };
+            this.jointDetailBox.show(this.dragTarget.bone.name, worldPosition, rotation, true);
           }
         }
         
@@ -782,8 +800,15 @@ class StickFigureApp3D {
   private selectJoint(bone: THREE.Bone): void {
     console.log(`🎯 Selecting joint: ${bone.name}`);
     this.selectedJoint = bone.name;
-    this.updateSelectionUI(bone);
-    this.showSelectionPanel();
+    // Update joint detail box
+    const worldPosition = new THREE.Vector3();
+    bone.getWorldPosition(worldPosition);
+    const rotation = {
+      x: bone.rotation.x * 180 / Math.PI,
+      y: bone.rotation.y * 180 / Math.PI,
+      z: bone.rotation.z * 180 / Math.PI
+    };
+    this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
     this.renderer.highlightBoneControl(bone.name);
     
     // Make rotation hints more prominent when a joint is selected
@@ -802,7 +827,7 @@ class StickFigureApp3D {
   private clearSelection(): void {
     console.log('🔄 Clearing selection');
     this.selectedJoint = null;
-    this.hideSelectionPanel();
+    this.jointDetailBox.hide();
     this.renderer.highlightBoneControl(null);
     
     // Reset rotation hints styling when nothing is selected
@@ -847,8 +872,15 @@ class StickFigureApp3D {
         // Save the action for undo/redo
         this.saveAction('bone_reset', `Reset ${this.selectedJoint} joint`, beforeState);
         
-        // Update the UI
-        this.updateSelectionUI(bone);
+        // Update the joint detail box
+        const worldPosition = new THREE.Vector3();
+        bone.getWorldPosition(worldPosition);
+        const rotation = {
+          x: bone.rotation.x * 180 / Math.PI,
+          y: bone.rotation.y * 180 / Math.PI,
+          z: bone.rotation.z * 180 / Math.PI
+        };
+        this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
         
         this.showMessage(`Reset ${this.selectedJoint} joint`, 'info');
         

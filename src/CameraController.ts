@@ -1,4 +1,4 @@
-import './new-style.css';
+import './camera-controller.css';
 
 /**
  * CameraController handles camera-related UI controls and event display for the poser3d app.
