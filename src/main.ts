@@ -874,6 +874,16 @@ class StickFigureApp3D {
   }
 
   private redo(): void {
+    console.log('🔄 Redo requested');
+    const afterState = this.undoRedoManager.redo();
+    if (afterState) {
+      console.log(`Redoing bone movement`);
+      this.restoreState(afterState);
+      this.showMessage(`Redid bone movement`, 'info');
+    } else {
+      this.showMessage('Nothing to redo', 'warning');
+    }
+    this.updateUndoRedoUI();
   }
 
   private restoreState(state: any): void {

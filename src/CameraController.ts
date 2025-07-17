@@ -21,8 +21,6 @@ export class CameraController {
     panel.className = 'control-panel';
     panel.innerHTML = `
       <button id="reset-camera">Reset Camera</button>
-      <button id="undo-btn">Undo</button>
-      <button id="redo-btn">Redo</button>
       <button id="view-front">Front View</button>
       <button id="view-back">Back View</button>
       <button id="view-left">Left View</button>
