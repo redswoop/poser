@@ -1,0 +1,138 @@
+/* IKControls styles */
+.ik-controls-root {
+  margin-bottom: 30px;
+}
+.ik-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+.ik-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: #fff;
+}
+.ik-btn:nth-child(1) {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+.ik-btn:nth-child(1):hover {
+  background: linear-gradient(135deg, #218838 0%, #1ba085 100%);
+}
+.ik-btn:nth-child(2) {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+}
+.ik-btn:nth-child(2):hover {
+  background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%);
+}
+.ik-btn:nth-child(3) {
+  background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+  color: #212529;
+}
+.ik-btn:nth-child(3):hover {
+  background: linear-gradient(135deg, #e0a800 0%, #d39e00 100%);
+}
+.ik-chains-list {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 12px;
+  min-height: 60px;
+}
+.no-chains {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  margin: 0;
+  padding: 20px;
+}
+.ik-chain-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+}
+.ik-chain-item:hover {
+  background: #f0f8ff;
+  border-color: #667eea;
+}
+.ik-chain-header {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+.ik-chain-name {
+  font-weight: 600;
+  color: #495057;
+  text-transform: capitalize;
+}
+.ik-chain-toggle {
+  font-weight: 600;
+}
+.ik-chain-details {
+  width: 100%;
+  margin-top: 8px;
+  display: none;
+}
+.ik-chain-bones {
+  margin-bottom: 8px;
+}
+.bone-list {
+  list-style: none;
+  padding-left: 16px;
+  margin: 4px 0;
+}
+.bone-item {
+  margin: 2px 0;
+}
+.ik-chain-controls {
+  display: flex;
+  gap: 6px;
+}
+.ik-chain-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.ik-chain-btn.target {
+  background: #28a745;
+  color: white;
+}
+.ik-chain-btn.target:hover {
+  background: #218838;
+}
+.ik-chain-btn.solve {
+  background: #007bff;
+  color: white;
+}
+.ik-chain-btn.solve:hover {
+  background: #0056b3;
+}
+.ik-chain-btn.remove {
+  background: #dc3545;
+  color: white;
+}
+.ik-chain-btn.remove:hover {
+  background: #c82333;
+}

@@ -1,6 +1,7 @@
 import './style.css';
 import { CameraController } from './CameraController';
 import { SettingsControls } from './SettingsControls';
+import { IKControls } from './IKControls';
 import * as THREE from 'three';
 import { PoseCommands } from './PoseCommands';
 import { ThreeRenderer } from './ThreeRenderer';
@@ -34,6 +35,7 @@ class StickFigureApp3D {
   private jointDetailBox: JointDetailBox;
   private poseCommands: PoseCommands;
   private settingsControls: SettingsControls;
+  private ikControls: IKControls;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -53,6 +55,7 @@ class StickFigureApp3D {
     this.jointDetailBox = new JointDetailBox();
     this.poseCommands = new PoseCommands();
     this.settingsControls = new SettingsControls();
+    this.ikControls = new IKControls();
     const container = document.querySelector('.container');
     const canvasContainer = container?.querySelector('.canvas-container');
     if (container && canvasContainer) {
@@ -65,6 +68,23 @@ class StickFigureApp3D {
       if (settingsContent) {
         settingsContent.innerHTML = '';
         settingsContent.appendChild(this.settingsControls.rootElement);
+      }
+      // Insert IK controls into IK panel
+      const ikContent = document.getElementById('ik-content');
+      if (ikContent) {
+        ikContent.innerHTML = '';
+        ikContent.appendChild(this.ikControls.rootElement);
+        this.ikControls.rootElement.addEventListener('setup-ik-chains', () => this.setupIKChains());
+        this.ikControls.rootElement.addEventListener('clear-ik-chains', () => this.clearIKChains());
+        this.ikControls.rootElement.addEventListener('test-ik', () => this.testIK());
+        this.ikControls.rootElement.addEventListener('toggle-ik-target', (e: Event) => {
+          const chain = (e as CustomEvent<string>).detail;
+          this.toggleIKTarget(chain);
+        });
+        this.ikControls.rootElement.addEventListener('activate-ik-solving', (e: Event) => {
+          const chain = (e as CustomEvent<string>).detail;
+          this.activateIKSolving(chain);
+        });
       }
       // Listen for reset-pose events
       this.poseCommands.rootElement.addEventListener('reset-pose', () => this.resetToDefaultPose());
@@ -335,8 +355,6 @@ class StickFigureApp3D {
     // JSON Pose Editor Modal
     this.setupJsonPoseEditor();
 
-    // IK Panel
-    this.setupIKPanel();
     
 
     // Mouse events for 3D bone control interaction
@@ -1777,25 +1795,6 @@ class StickFigureApp3D {
     }
   }
 
-  private setupIKPanel(): void {
-    const setupBtn = document.getElementById('setup-ik-chains');
-    const clearBtn = document.getElementById('clear-ik-chains');
-    const testBtn = document.getElementById('test-ik');
-    
-    setupBtn?.addEventListener('click', () => {
-      this.setupIKChains();
-    });
-    
-    clearBtn?.addEventListener('click', () => {
-      this.clearIKChains();
-    });
-
-    testBtn?.addEventListener('click', () => {
-      this.testIK();
-    });
-  }
-
-
   private setupIKChains(): void {
     const boneController = this.renderer.getBoneController();
     if (!boneController) {
@@ -1845,75 +1844,12 @@ class StickFigureApp3D {
   }
 
   private updateIKChainsList(): void {
-    const chainsList = document.getElementById('ik-chains-list');
-    if (!chainsList) return;
-
+    // Build chain data and delegate rendering to IKControls
     const boneController = this.renderer.getBoneController();
-    if (!boneController) {
-      chainsList.innerHTML = '<p class="no-chains">No model loaded</p>';
-      return;
-    }
-
-    const chainNames = boneController.getIKChainNames();
-    
-    if (chainNames.length === 0) {
-      chainsList.innerHTML = '<p class="no-chains">No IK chains created yet</p>';
-      return;
-    }
-
-    // Get the bones for each chain
-    const chainData = chainNames.map((chainName: string) => {
-      const bones = boneController.getIKChainBones(chainName);
-      return { chainName, bones };
-    });
-
-    chainsList.innerHTML = chainData.map(({ chainName, bones }: {chainName: string, bones: string[]}) => `
-      <div class="ik-chain-item">
-        <div class="ik-chain-header" onclick="toggleIKChainDetails('${chainName}')">
-          <span class="ik-chain-name">${chainName}</span>
-          <span class="ik-chain-toggle" id="toggle-${chainName}">▼</span>
-        </div>
-        <div class="ik-chain-details" id="details-${chainName}" style="display: none;">
-          <div class="ik-chain-bones">
-            <strong>Bones (${bones.length}):</strong>
-            <ul class="bone-list">
-              ${bones.map((bone: string) => `<li class="bone-item">${bone}</li>`).join('')}
-            </ul>
-          </div>
-          <div class="ik-chain-controls">
-            <button class="ik-chain-btn target" data-chain="${chainName}" title="Toggle target visibility">👁️ Target</button>
-            <button class="ik-chain-btn solve" data-chain="${chainName}" title="Test solve">🎯 Test</button>
-          </div>
-        </div>
-      </div>
-    `).join('');
-
-    // Add event listeners for chain controls
-    chainsList.querySelectorAll('.ik-chain-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const button = e.target as HTMLButtonElement;
-        const chainName = button.getAttribute('data-chain');
-        if (!chainName) return;
-
-        if (button.classList.contains('target')) {
-          this.toggleIKTarget(chainName);
-        } else if (button.classList.contains('solve')) {
-          this.activateIKSolving(chainName);
-        }
-      });
-    });
-
-    // Add the toggle function to the global scope so onclick can access it
-    (window as any).toggleIKChainDetails = (chainName: string) => {
-      const details = document.getElementById(`details-${chainName}`);
-      const toggle = document.getElementById(`toggle-${chainName}`);
-      
-      if (details && toggle) {
-        const isHidden = details.style.display === 'none';
-        details.style.display = isHidden ? 'block' : 'none';
-        toggle.textContent = isHidden ? '▲' : '▼';
-      }
-    };
+    const chains = boneController
+      ? boneController.getIKChainNames().map((name: string) => ({ chainName: name, bones: boneController.getIKChainBones(name) }))
+      : [];
+    this.ikControls.updateChainsList(chains);
   }
 
   private toggleIKTarget(chainName: string): void {
