@@ -6,12 +6,14 @@ import * as THREE from 'three';
 import { PoseCommands } from './PoseCommands';
 import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
+import { UndoRedoControls } from './UndoRedoControls';
 import { JointDetailBox } from './JointDetailBox';
 import type { GLTFModelSettings } from './types';
 
 class StickFigureApp3D {
   private renderer!: ThreeRenderer;
   private undoRedoManager: UndoRedoManager;
+  private undoRedoControls: UndoRedoControls;
   private isDragging = false;
   private dragTarget: { bone: THREE.Bone; control: THREE.Object3D; originalRotation: THREE.Euler } | null = null;
   private dragStartState: any = null;
@@ -56,6 +58,7 @@ class StickFigureApp3D {
     this.poseCommands = new PoseCommands();
     this.settingsControls = new SettingsControls();
     this.ikControls = new IKControls();
+    this.undoRedoControls = new UndoRedoControls(this.undoRedoManager);
     const container = document.querySelector('.container');
     const canvasContainer = container?.querySelector('.canvas-container');
     if (container && canvasContainer) {
@@ -85,6 +88,14 @@ class StickFigureApp3D {
           const chain = (e as CustomEvent<string>).detail;
           this.activateIKSolving(chain);
         });
+      }
+      // Insert UndoRedo controls into undo-redo panel
+      const undoRedoContent = document.getElementById('undo-redo-content');
+      if (undoRedoContent) {
+        undoRedoContent.innerHTML = '';
+        undoRedoContent.appendChild(this.undoRedoControls.rootElement);
+        this.undoRedoControls.rootElement.addEventListener('undo-requested', () => this.undo());
+        this.undoRedoControls.rootElement.addEventListener('redo-requested', () => this.redo());
       }
       // Listen for reset-pose events
       this.poseCommands.rootElement.addEventListener('reset-pose', () => this.resetToDefaultPose());
@@ -207,12 +218,6 @@ class StickFigureApp3D {
           this.renderer.resetCamera();
           this.saveCurrentStateDebounced();
           break;
-        case 'undo-btn':
-          this.undo();
-          break;
-        case 'redo-btn':
-          this.redo();
-          break;
         case 'view-front':
           this.renderer.setCameraView('front');
           this.saveCurrentStateDebounced();
@@ -240,15 +245,9 @@ class StickFigureApp3D {
       }
     });
 
-    // Keyboard shortcuts for undo/redo
+    // Other keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        this.undo();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault();
-        this.redo();
-      } else if (e.key === 't' || e.key === 'T') {
+      if (e.key === 't' || e.key === 'T') {
         this.testStateSaving();
       } else if (e.key === 's' || e.key === 'S') {
         this.saveCurrentStateImmediate();
@@ -900,16 +899,7 @@ class StickFigureApp3D {
   }
 
   private updateUndoRedoUI(): void {
-    const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
-    const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
-    
-    if (undoBtn) {
-      undoBtn.disabled = !this.undoRedoManager.canUndo();
-    }
-    
-    if (redoBtn) {
-      redoBtn.disabled = !this.undoRedoManager.canRedo();
-    }
+    this.undoRedoControls.updateUI();
   }
 
   private showMessage(message: string, type: 'success' | 'error' | 'info' | 'warning'): void {
