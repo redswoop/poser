@@ -1,0 +1,42 @@
+.settings-controls-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-controls-container .settings-group {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.settings-controls-container .settings-group:last-child {
+  border-bottom: none;
+}
+
+.settings-controls-container .settings-group h4 {
+  margin-bottom: 8px;
+  font-size: 1em;
+  color: #333;
+}
+
+.settings-controls-container .setting-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.settings-controls-container .setting-row label {
+  flex: 1;
+  font-size: 0.9em;
+}
+
+.settings-controls-container .setting-row input[type="range"] {
+  flex: 2;
+}
+
+.settings-controls-container .setting-row .value-display {
+  margin-left: 8px;
+  min-width: 30px;
+  text-align: right;
+  font-weight: bold;
+}

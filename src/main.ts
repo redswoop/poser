@@ -1,11 +1,12 @@
 import './style.css';
 import { CameraController } from './CameraController';
+import { SettingsControls } from './SettingsControls';
 import * as THREE from 'three';
 import { PoseCommands } from './PoseCommands';
 import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
 import { JointDetailBox } from './JointDetailBox';
-import type { SceneSettings, GLTFModelSettings } from './types';
+import type { GLTFModelSettings } from './types';
 
 class StickFigureApp3D {
   private renderer!: ThreeRenderer;
@@ -32,6 +33,7 @@ class StickFigureApp3D {
   private cameraController: CameraController;
   private jointDetailBox: JointDetailBox;
   private poseCommands: PoseCommands;
+  private settingsControls: SettingsControls;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -50,6 +52,7 @@ class StickFigureApp3D {
     this.cameraController = new CameraController();
     this.jointDetailBox = new JointDetailBox();
     this.poseCommands = new PoseCommands();
+    this.settingsControls = new SettingsControls();
     const container = document.querySelector('.container');
     const canvasContainer = container?.querySelector('.canvas-container');
     if (container && canvasContainer) {
@@ -57,6 +60,12 @@ class StickFigureApp3D {
       container.insertBefore(this.cameraController.rootElement, container.querySelector('.main-content'));
       // Insert pose commands below canvas
       canvasContainer.insertAdjacentElement('afterend', this.poseCommands.rootElement);
+      // Insert settings controls into settings panel
+      const settingsContent = document.getElementById('settings-content');
+      if (settingsContent) {
+        settingsContent.innerHTML = '';
+        settingsContent.appendChild(this.settingsControls.rootElement);
+      }
       // Listen for reset-pose events
       this.poseCommands.rootElement.addEventListener('reset-pose', () => this.resetToDefaultPose());
     }
@@ -235,8 +244,46 @@ class StickFigureApp3D {
       this.saveCurrentStateDebounced();
     });
 
-    // Settings
-    this.setupSettingsEventListeners();
+    // Settings controls events
+    this.settingsControls.rootElement.addEventListener('toggle-grid', (e) => {
+      const visible = (e as CustomEvent<boolean>).detail;
+      this.renderer.updateSettings({ gridVisible: visible });
+      this.saveCurrentStateDebounced();
+    });
+    this.settingsControls.rootElement.addEventListener('load-model', async (e) => {
+      const file = (e as CustomEvent<File>).detail;
+      const url = URL.createObjectURL(file);
+      try {
+        await this.loadModelFromPath(url);
+        this.showMessage(`Loaded 3D model: ${file.name}`, 'success');
+        this.saveCurrentStateImmediate();
+      } catch (error) {
+        this.showMessage(`Error loading model: ${error}`, 'error');
+      }
+    });
+    this.settingsControls.rootElement.addEventListener('toggle-model-visibility', (e) => {
+      const visible = (e as CustomEvent<boolean>).detail;
+      this.renderer.setGLTFVisible(visible);
+      this.currentModelSettings = this.renderer.getGLTFSettings();
+      this.saveCurrentStateDebounced();
+    });
+    this.settingsControls.rootElement.addEventListener('model-opacity-change', (e) => {
+      const value = (e as CustomEvent<number>).detail;
+      this.renderer.updateGLTFSettings({ modelOpacity: value });
+      this.currentModelSettings = this.renderer.getGLTFSettings();
+      this.saveCurrentStateDebounced();
+    });
+    this.settingsControls.rootElement.addEventListener('model-scale-change', (e) => {
+      const value = (e as CustomEvent<number>).detail;
+      this.renderer.updateGLTFSettings({ modelScale: value });
+      this.currentModelSettings = this.renderer.getGLTFSettings();
+      this.saveCurrentStateDebounced();
+    });
+    this.settingsControls.rootElement.addEventListener('bone-depth-limit-change', (e) => {
+      const value = (e as CustomEvent<number>).detail;
+      this.renderer.setBoneDepthLimit(value);
+      this.saveCurrentStateDebounced();
+    });
 
     // Export/Import character state
     const exportButton = document.getElementById('export-character');
@@ -636,108 +683,9 @@ class StickFigureApp3D {
     });
   }
 
-  private setupSettingsEventListeners(): void {
-    const gridVisibleCheckbox = document.getElementById('grid-visible') as HTMLInputElement;
-    
-    gridVisibleCheckbox?.addEventListener('change', () => {
-      const settings: Partial<SceneSettings> = {
-        gridVisible: gridVisibleCheckbox.checked
-      };
-      this.renderer.updateSettings(settings);
-      
-      // Save state after UI change
-      this.saveCurrentStateDebounced();
-    });
-
-    // glTF model controls
-    const gltfFileInput = document.getElementById('gltf-file') as HTMLInputElement;
-    const modelOpacitySlider = document.getElementById('model-opacity') as HTMLInputElement;
-    const modelScaleSlider = document.getElementById('model-scale') as HTMLInputElement;
-    const showGltfModelCheckbox = document.getElementById('show-gltf-model') as HTMLInputElement;
-
-    gltfFileInput?.addEventListener('change', async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const url = URL.createObjectURL(file);
-        try {
-          await this.loadModelFromPath(url);
-          this.showMessage(`Loaded 3D model: ${file.name}`, 'success');
-          
-          // Save the state after loading a new model
-          this.saveCurrentStateImmediate();
-        } catch (error) {
-          this.showMessage(`Error loading model: ${error}`, 'error');
-        }
-      }
-    });
-
-    modelOpacitySlider?.addEventListener('input', () => {
-      console.log('🎛️ Model opacity slider changed');
-      const settings = {
-        modelOpacity: parseFloat(modelOpacitySlider.value)
-      };
-      this.renderer.updateGLTFSettings(settings);
-      
-      // Update current model settings
-      this.currentModelSettings = this.renderer.getGLTFSettings();
-      
-      // Update value display
-      const valueDisplay = modelOpacitySlider.parentElement?.querySelector('.value-display');
-      if (valueDisplay) {
-        valueDisplay.textContent = parseFloat(modelOpacitySlider.value).toFixed(1);
-      }
-      
-      // Save state after UI change
-      console.log('🔄 Triggering save after opacity change');
-      this.saveCurrentStateDebounced();
-    });
-
-    modelScaleSlider?.addEventListener('input', () => {
-      const settings = {
-        modelScale: parseFloat(modelScaleSlider.value)
-      };
-      this.renderer.updateGLTFSettings(settings);
-      
-      // Update current model settings
-      this.currentModelSettings = this.renderer.getGLTFSettings();
-      
-      // Update value display
-      const valueDisplay = modelScaleSlider.parentElement?.querySelector('.value-display');
-      if (valueDisplay) {
-        valueDisplay.textContent = parseFloat(modelScaleSlider.value).toFixed(1);
-      }
-      
-      // Save state after UI change
-      this.saveCurrentStateDebounced();
-    });
-
-    // Bone depth limit slider
-    const boneDepthSlider = document.getElementById('bone-depth-limit') as HTMLInputElement;
-    boneDepthSlider?.addEventListener('input', () => {
-      const depthLimit = parseInt(boneDepthSlider.value);
-      this.renderer.setBoneDepthLimit(depthLimit);
-      
-      // Update value display
-      const valueDisplay = boneDepthSlider.parentElement?.querySelector('.value-display');
-      if (valueDisplay) {
-        valueDisplay.textContent = depthLimit.toString();
-      }
-      
-      console.log(`🔍 Bone depth limit set to: ${depthLimit}`);
-      
-      // Save state after UI change
-      this.saveCurrentStateDebounced();
-    });
-
-    showGltfModelCheckbox?.addEventListener('change', () => {
-      this.renderer.setGLTFVisible(showGltfModelCheckbox.checked);
-      
-      // Update current model settings
-      this.currentModelSettings = this.renderer.getGLTFSettings();
-      
-      // Save state after UI change
-      this.saveCurrentStateDebounced();
-    });
+  // Find a bone by name via the renderer
+  private findBoneByName(boneName: string): THREE.Bone | null {
+    return this.renderer.getBoneByName(boneName);
   }
 
   private setupCollapsiblePanels(): void {
@@ -870,13 +818,13 @@ class StickFigureApp3D {
       const bone = this.findBoneByName(this.selectedJoint);
       if (bone) {
         const beforeState = this.getCurrentState();
-        
+
         // Reset rotation to identity
         bone.rotation.set(0, 0, 0);
-        
+
         // Save the action for undo/redo
         this.saveAction('bone_reset', `Reset ${this.selectedJoint} joint`, beforeState);
-        
+
         // Update the joint detail box
         const worldPosition = new THREE.Vector3();
         bone.getWorldPosition(worldPosition);
@@ -886,84 +834,13 @@ class StickFigureApp3D {
           z: bone.rotation.z * 180 / Math.PI
         };
         this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
-        
+
         this.showMessage(`Reset ${this.selectedJoint} joint`, 'info');
-        
+
         // Save the current state after reset
         this.saveCurrentStateImmediate();
       }
     }
-  }
-
-  private updateSelectionUI(bone: THREE.Bone): void {
-    const nameElement = document.getElementById('selected-joint-name-compact');
-    const xPosElement = document.getElementById('position-x-compact');
-    const yPosElement = document.getElementById('position-y-compact');
-    const zPosElement = document.getElementById('position-z-compact');
-    const xRotElement = document.getElementById('rotation-x-compact');
-    const yRotElement = document.getElementById('rotation-y-compact');
-    const zRotElement = document.getElementById('rotation-z-compact');
-    
-    if (nameElement) {
-      nameElement.textContent = bone.name;
-      nameElement.classList.remove('none');
-    }
-    
-    // Get the world position of the bone
-    const worldPosition = new THREE.Vector3();
-    bone.getWorldPosition(worldPosition);
-    
-    // Update position display
-    if (xPosElement) xPosElement.textContent = worldPosition.x.toFixed(2);
-    if (yPosElement) yPosElement.textContent = worldPosition.y.toFixed(2);
-    if (zPosElement) zPosElement.textContent = worldPosition.z.toFixed(2);
-    
-    // Update rotation display (convert from radians to degrees)
-    if (xRotElement) xRotElement.textContent = `${(bone.rotation.x * 180 / Math.PI).toFixed(2)}°`;
-    if (yRotElement) yRotElement.textContent = `${(bone.rotation.y * 180 / Math.PI).toFixed(2)}°`;
-    if (zRotElement) zRotElement.textContent = `${(bone.rotation.z * 180 / Math.PI).toFixed(2)}°`;
-  }
-
-
-
-  private findBoneByName(boneName: string): THREE.Bone | null {
-    return this.renderer.getBoneByName(boneName);
-  }
-
-  private getCurrentState(): any {
-    // Return current state for undo/redo functionality
-    return {
-      timestamp: Date.now(),
-      boneRotations: this.renderer.getBoneRotations(),
-      modelPath: this.currentModelPath,
-      modelSettings: this.currentModelSettings,
-      boneDepthLimit: this.renderer.getBoneDepthLimit()
-    };
-  }
-
-  private saveAction(type: string, description: string, beforeState: any): void {
-    console.log(`Saving action: ${type} - ${description}`);
-    const afterState = this.getCurrentState();
-    
-    // Create a simplified app state structure for the undo manager
-    const beforeAppState: any = {
-      boneRotations: beforeState.boneRotations || {},
-      timestamp: beforeState.timestamp || Date.now()
-    };
-    
-    const afterAppState: any = {
-      boneRotations: afterState.boneRotations || {},
-      timestamp: afterState.timestamp || Date.now()
-    };
-    
-    this.undoRedoManager.saveState(
-      type as any,
-      description,
-      beforeAppState,
-      afterAppState
-    );
-    
-    this.updateUndoRedoUI();
   }
 
   private undo(): void {
@@ -980,16 +857,6 @@ class StickFigureApp3D {
   }
 
   private redo(): void {
-    console.log('🔄 Redo requested');
-    const afterState = this.undoRedoManager.redo();
-    if (afterState) {
-      console.log(`Redoing bone movement`);
-      this.restoreState(afterState);
-      this.showMessage(`Redid bone movement`, 'info');
-    } else {
-      this.showMessage('Nothing to redo', 'warning');
-    }
-    this.updateUndoRedoUI();
   }
 
   private restoreState(state: any): void {
@@ -1171,6 +1038,33 @@ class StickFigureApp3D {
       indicator.style.display = 'none';
       indicator.classList.remove('active');
     }
+  }
+  
+  private getCurrentState(): any {
+    return {
+      timestamp: Date.now(),
+      boneRotations: this.renderer.getBoneRotations(),
+      modelPath: this.currentModelPath,
+      modelSettings: this.currentModelSettings,
+      boneDepthLimit: this.renderer.getBoneDepthLimit()
+    };
+  }
+
+  private saveAction(type: string, description: string, beforeState: any): void {
+    const afterState = this.getCurrentState();
+    this.undoRedoManager.saveState(type as any, description, beforeState, afterState);
+    this.updateUndoRedoUI();
+  }
+
+  private updateSelectionUI(bone: THREE.Bone): void {
+    const worldPosition = new THREE.Vector3();
+    bone.getWorldPosition(worldPosition);
+    const rotation = {
+      x: bone.rotation.x * 180 / Math.PI,
+      y: bone.rotation.y * 180 / Math.PI,
+      z: bone.rotation.z * 180 / Math.PI
+    };
+    this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
   }
 
   private enterInteractiveIKMode(): void {
