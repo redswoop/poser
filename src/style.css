@@ -42,22 +42,7 @@ header p {
   flex-wrap: wrap;
 }
 
-.camera-controls {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
-}
-
-.camera-label {
-  color: white;
-  font-weight: 600;
-  margin-right: 10px;
-}
-
-.toolbar button, .view-btn {
+.toolbar button {
   padding: 12px 24px;
   border: none;
   border-radius: 8px;
@@ -69,13 +54,7 @@ header p {
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-.view-btn {
-  padding: 8px 16px;
-  font-size: 0.9em;
-  background: rgba(255,255,255,0.9);
-}
-
-.toolbar button:hover, .view-btn:hover {
+.toolbar button:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(0,0,0,0.2);
 }

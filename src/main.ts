@@ -1,4 +1,5 @@
 import './style.css';
+import { CameraController } from './CameraController';
 import * as THREE from 'three';
 import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
@@ -26,6 +27,7 @@ class StickFigureApp3D {
 
   // UI Elements
   private canvasContainer: HTMLElement;
+  private cameraController: CameraController;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -35,7 +37,18 @@ class StickFigureApp3D {
     this.undoRedoManager = new UndoRedoManager();
     
     // Get UI elements
-    this.canvasContainer = document.getElementById('three-canvas')!;;
+    this.canvasContainer = document.getElementById('three-canvas')!;
+    // Remove old camera-controls div if present
+    const oldControls = document.getElementById('camera-controls');
+    if (oldControls && oldControls.parentNode) {
+      oldControls.parentNode.removeChild(oldControls);
+    }
+    this.cameraController = new CameraController();
+    // Insert the camera controller UI into the container
+    const container = document.querySelector('.container');
+    if (container) {
+      container.insertBefore(this.cameraController.rootElement, container.querySelector('.main-content'));
+    }
 
     this.initializeRenderer();
     this.setupEventListeners();
@@ -143,16 +156,46 @@ class StickFigureApp3D {
   }
 
   private setupEventListeners(): void {
-    // Toolbar buttons
-    document.getElementById('reset-camera')?.addEventListener('click', () => {
-      this.renderer.resetCamera();
-      // Save state after camera reset
-      this.saveCurrentStateDebounced();
+    // Listen for camera control actions from CameraController
+    this.cameraController.rootElement.addEventListener('control-action', (e: Event) => {
+      const action = (e as CustomEvent).detail.action;
+      switch (action) {
+        case 'reset-camera':
+          this.renderer.resetCamera();
+          this.saveCurrentStateDebounced();
+          break;
+        case 'undo-btn':
+          this.undo();
+          break;
+        case 'redo-btn':
+          this.redo();
+          break;
+        case 'view-front':
+          this.renderer.setCameraView('front');
+          this.saveCurrentStateDebounced();
+          break;
+        case 'view-back':
+          this.renderer.setCameraView('back');
+          this.saveCurrentStateDebounced();
+          break;
+        case 'view-left':
+          this.renderer.setCameraView('left');
+          this.saveCurrentStateDebounced();
+          break;
+        case 'view-right':
+          this.renderer.setCameraView('right');
+          this.saveCurrentStateDebounced();
+          break;
+        case 'view-top':
+          this.renderer.setCameraView('top');
+          this.saveCurrentStateDebounced();
+          break;
+        case 'view-bottom':
+          this.renderer.setCameraView('bottom');
+          this.saveCurrentStateDebounced();
+          break;
+      }
     });
-
-    // Undo/Redo buttons
-    document.getElementById('undo-btn')?.addEventListener('click', () => this.undo());
-    document.getElementById('redo-btn')?.addEventListener('click', () => this.redo());
 
     // Keyboard shortcuts for undo/redo
     document.addEventListener('keydown', (e) => {
@@ -169,32 +212,6 @@ class StickFigureApp3D {
       } else if (e.key === 'l' || e.key === 'L') {
         this.loadSavedState();
       }
-    });
-
-    // Camera view buttons
-    document.getElementById('view-front')?.addEventListener('click', () => {
-      this.renderer.setCameraView('front');
-      this.saveCurrentStateDebounced();
-    });
-    document.getElementById('view-back')?.addEventListener('click', () => {
-      this.renderer.setCameraView('back');
-      this.saveCurrentStateDebounced();
-    });
-    document.getElementById('view-left')?.addEventListener('click', () => {
-      this.renderer.setCameraView('left');
-      this.saveCurrentStateDebounced();
-    });
-    document.getElementById('view-right')?.addEventListener('click', () => {
-      this.renderer.setCameraView('right');
-      this.saveCurrentStateDebounced();
-    });
-    document.getElementById('view-top')?.addEventListener('click', () => {
-      this.renderer.setCameraView('top');
-      this.saveCurrentStateDebounced();
-    });
-    document.getElementById('view-bottom')?.addEventListener('click', () => {
-      this.renderer.setCameraView('bottom');
-      this.saveCurrentStateDebounced();
     });
 
     // Listen for camera changes from OrbitControls
@@ -243,6 +260,14 @@ class StickFigureApp3D {
         
         // Reset the file input
         (event.target as HTMLInputElement).value = '';
+      }
+    });
+
+    // Clear state button
+    const clearStateButton = document.getElementById('clear-state');
+    clearStateButton?.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear all saved state? This action cannot be undone.')) {
+        this.clearSavedState();
       }
     });
 
@@ -726,7 +751,7 @@ class StickFigureApp3D {
   }
 
   private async loadDefaultModel(): Promise<void> {
-    const defaultModelPath = '/womenfemale_body_base_rigged.glb';
+    const defaultModelPath = '/robot.glb';
     
     try {
       console.log('🎭 Loading default GLB model...');
@@ -1353,6 +1378,17 @@ class StickFigureApp3D {
           
         } catch (error) {
           console.warn('⚠️ Could not load saved model:', error);
+          console.log('🔄 Clearing problematic model path from state');
+          
+          // Clear the problematic model path to prevent repeated failures
+          this.currentModelPath = null;
+          this.currentModelSettings = null;
+          
+          // Show user-friendly message
+          this.showMessage('Saved model could not be loaded. Continuing without it.', 'warning');
+          
+          // Don't save this broken state - let the app load the default model instead
+          console.log('💡 Will load default model instead');
         }
       }
       
@@ -2164,8 +2200,9 @@ class StickFigureApp3D {
 
   // Debug method to clear saved state
   public clearSavedState(): void {
-    localStorage.removeItem('poser3d-app-state');
+    localStorage.removeItem('poser3d-simple-state');
     console.log('🗑️ Cleared saved state');
+    this.showMessage('Local state cleared successfully', 'success');
   }
 
   private resetToDefaultPose(): void {
