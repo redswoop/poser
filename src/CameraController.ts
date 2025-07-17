@@ -7,15 +7,12 @@ import './camera-controller.css';
 export class CameraController {
   public rootElement: HTMLElement;
   private controlPanel: HTMLElement;
-  private eventLog: HTMLTextAreaElement;
 
   constructor() {
     this.rootElement = document.createElement('div');
     this.rootElement.className = 'camera-controller-root';
     this.controlPanel = this.createControlPanel();
-    this.eventLog = this.createEventLog();
     this.rootElement.appendChild(this.controlPanel);
-    this.rootElement.appendChild(this.eventLog);
     this.attachListeners();
   }
 
@@ -36,30 +33,17 @@ export class CameraController {
     return panel;
   }
 
-  private createEventLog(): HTMLTextAreaElement {
-    const log = document.createElement('textarea');
-    log.className = 'event-log';
-    log.rows = 8;
-    log.readOnly = true;
-    log.placeholder = 'Event log...';
-    return log;
-  }
 
   private attachListeners(): void {
     this.controlPanel.querySelectorAll('button').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const id = (e.target as HTMLButtonElement).id;
-        this.logEvent(`Button clicked: ${id}`);
         // Optionally, emit custom events for integration
         this.rootElement.dispatchEvent(new CustomEvent('control-action', { detail: { action: id } }));
       });
     });
   }
 
-  public logEvent(msg: string): void {
-    this.eventLog.value += msg + '\n';
-    this.eventLog.scrollTop = this.eventLog.scrollHeight;
-  }
 }
 
 // For standalone testing:
