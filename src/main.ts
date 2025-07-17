@@ -1,6 +1,7 @@
 import './style.css';
 import { CameraController } from './CameraController';
 import * as THREE from 'three';
+import { PoseCommands } from './PoseCommands';
 import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
 import { JointDetailBox } from './JointDetailBox';
@@ -30,6 +31,7 @@ class StickFigureApp3D {
   private canvasContainer: HTMLElement;
   private cameraController: CameraController;
   private jointDetailBox: JointDetailBox;
+  private poseCommands: PoseCommands;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -47,11 +49,16 @@ class StickFigureApp3D {
     }
     this.cameraController = new CameraController();
     this.jointDetailBox = new JointDetailBox();
+    this.poseCommands = new PoseCommands();
     const container = document.querySelector('.container');
     const canvasContainer = container?.querySelector('.canvas-container');
     if (container && canvasContainer) {
       canvasContainer.insertAdjacentElement('afterend', this.jointDetailBox.rootElement);
       container.insertBefore(this.cameraController.rootElement, container.querySelector('.main-content'));
+      // Insert pose commands below canvas
+      canvasContainer.insertAdjacentElement('afterend', this.poseCommands.rootElement);
+      // Listen for reset-pose events
+      this.poseCommands.rootElement.addEventListener('reset-pose', () => this.resetToDefaultPose());
     }
     this.jointDetailBox.rootElement.addEventListener('reset-joint', () => {
       this.resetSelectedJoint();
@@ -284,8 +291,6 @@ class StickFigureApp3D {
     // IK Panel
     this.setupIKPanel();
     
-    // Pose Commands
-    this.setupPoseCommands();
 
     // Mouse events for 3D bone control interaction
     this.setupMouseEventListeners();
@@ -919,31 +924,7 @@ class StickFigureApp3D {
     if (zRotElement) zRotElement.textContent = `${(bone.rotation.z * 180 / Math.PI).toFixed(2)}°`;
   }
 
-  private showSelectionPanel(): void {
-    const selectionDetails = document.getElementById('selection-details');
-    const resetBtn = document.getElementById('reset-joint-btn-compact');
-    
-    if (selectionDetails) {
-      selectionDetails.style.display = 'flex';
-    }
-    
-    if (resetBtn) {
-      resetBtn.style.display = 'block';
-    }
-  }
 
-  private hideSelectionPanel(): void {
-    const selectionDetails = document.getElementById('selection-details');
-    const resetBtn = document.getElementById('reset-joint-btn-compact');
-    
-    if (selectionDetails) {
-      selectionDetails.style.display = 'none';
-    }
-    
-    if (resetBtn) {
-      resetBtn.style.display = 'none';
-    }
-  }
 
   private findBoneByName(boneName: string): THREE.Bone | null {
     return this.renderer.getBoneByName(boneName);
@@ -1700,8 +1681,15 @@ class StickFigureApp3D {
             this.selectedJoint = characterState.selectedJoint;
             const bone = this.renderer.getBoneByName(characterState.selectedJoint);
             if (bone) {
-              this.updateSelectionUI(bone);
-              this.showSelectionPanel();
+              // Show joint details via JointDetailBox
+              const worldPosition = new THREE.Vector3();
+              bone.getWorldPosition(worldPosition);
+              const rotation = {
+                x: bone.rotation.x * 180 / Math.PI,
+                y: bone.rotation.y * 180 / Math.PI,
+                z: bone.rotation.z * 180 / Math.PI,
+              };
+              this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
               this.renderer.highlightBoneControl(characterState.selectedJoint);
             }
           }
@@ -1724,8 +1712,15 @@ class StickFigureApp3D {
           this.selectedJoint = characterState.selectedJoint;
           const bone = this.renderer.getBoneByName(characterState.selectedJoint);
           if (bone) {
-            this.updateSelectionUI(bone);
-            this.showSelectionPanel();
+            // Show joint details via JointDetailBox
+            const worldPosition = new THREE.Vector3();
+            bone.getWorldPosition(worldPosition);
+            const rotation = {
+              x: bone.rotation.x * 180 / Math.PI,
+              y: bone.rotation.y * 180 / Math.PI,
+              z: bone.rotation.z * 180 / Math.PI,
+            };
+            this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
             this.renderer.highlightBoneControl(characterState.selectedJoint);
           }
         }
@@ -1906,13 +1901,6 @@ class StickFigureApp3D {
     });
   }
 
-  private setupPoseCommands(): void {
-    const resetToDefaultBtn = document.getElementById('reset-to-default-pose');
-    
-    resetToDefaultBtn?.addEventListener('click', () => {
-      this.resetToDefaultPose();
-    });
-  }
 
   private setupIKChains(): void {
     const boneController = this.renderer.getBoneController();
