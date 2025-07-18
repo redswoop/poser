@@ -218,7 +218,7 @@ export class ModelManager extends EventTarget {
           resolve(modelData);
         },
         (progress) => {
-          console.log(`📈 Loading progress: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+          console.debug(`📈 Loading progress: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
         },
         (error) => {
           console.error(`❌ GLTF load error for ${modelPath}:`, error);
