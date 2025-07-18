@@ -11,10 +11,10 @@ import { JointDetailBox } from './JointDetailBox';
 import { Character3D } from './Character3D';
 import { ModelManager } from './ModelManager';
 import { DebugManager } from './DebugManager';
-import { JsonPoseEditor, type JsonPoseEditorCallbacks } from './JsonPoseEditor';
+import { JsonPoseEditor } from './JsonPoseEditor';
 import type { GLTFModelSettings } from './types';
 
-class StickFigureApp3D implements JsonPoseEditorCallbacks {
+class StickFigureApp3D {
   private renderer!: ThreeRenderer;
   private modelManager!: ModelManager;
   private debugManager!: DebugManager;
@@ -277,7 +277,7 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
     const importFileInput = document.getElementById('import-file') as HTMLInputElement;
     
     exportButton?.addEventListener('click', () => {
-      const characterState = this.exportCharacterState();
+      const characterState = JSON.stringify(this.character.exportCharacterState(), null, 2);
       
       // Create a downloadable file
       const blob = new Blob([characterState], { type: 'application/json' });
@@ -301,7 +301,40 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
         const reader = new FileReader();
         reader.onload = async (e) => {
           const jsonString = e.target?.result as string;
-          await this.importCharacterState(jsonString);
+          try {
+            const characterState = JSON.parse(jsonString);
+            
+            // Check if this includes a model path that needs loading
+            if (characterState.modelPath && characterState.modelPath !== this.character.modelPath) {
+              const result = await this.modelManager.loadModel(characterState.modelPath);
+              if (result.success) {
+                this.character = result.character;
+                // Apply the character state to the newly loaded character
+                const importResult = await this.character.importCharacterState(characterState);
+                if (importResult.success) {
+                  this.renderer.updateBoneController();
+                  this.saveCurrentStateImmediate();
+                  this.showMessage('Character state imported successfully', 'success');
+                } else {
+                  this.showMessage(`Error importing character state: ${importResult.error}`, 'error');
+                }
+              } else {
+                this.showMessage(`Error loading model: ${result.error}`, 'error');
+              }
+            } else {
+              // No model loading needed, just import state
+              const importResult = await this.character.importCharacterState(characterState);
+              if (importResult.success) {
+                this.renderer.updateBoneController();
+                this.saveCurrentStateImmediate();
+                this.showMessage('Character state imported successfully', 'success');
+              } else {
+                this.showMessage(`Error importing character state: ${importResult.error}`, 'error');
+              }
+            }
+          } catch (error) {
+            this.showMessage(`Error parsing character state: ${error}`, 'error');
+          }
         };
         reader.readAsText(file);
         
@@ -320,8 +353,18 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
 
     // Initialize JSON Pose Editor
     new JsonPoseEditor({
-      exportPoseAsJson: () => this.exportPoseAsJson(),
-      importPoseFromJson: (jsonData: any) => this.importPoseFromJson(jsonData),
+      exportPoseAsJson: () => this.character.exportPose(),
+      importPoseFromJson: async (jsonData: any) => {
+        const result = await this.character.importPose(jsonData);
+        if (result.success) {
+          // Update renderer to reflect the imported pose
+          this.renderer.updateBoneController();
+          // Save the current state after import
+          this.saveCurrentStateImmediate();
+        } else {
+          throw new Error(result.error || 'Unknown import error');
+        }
+      },
       showMessage: (message: string, type: 'success' | 'error' | 'info' | 'warning') => this.showMessage(message, type)
     });
 
@@ -1513,107 +1556,6 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
     // this.stateManager.markDirty();
   }
 
-  public exportCharacterState(): string {
-    const characterState = {
-      modelPath: this.character.modelPath,
-      modelSettings: this.character.getSettings(),
-      boneRotations: this.renderer.getBoneRotations(),
-      selectedJoint: this.selectedJoint,
-      timestamp: Date.now(),
-      version: '1.0.0'
-    };
-    
-    return JSON.stringify(characterState, null, 2);
-  }
-
-  public async importCharacterState(jsonString: string): Promise<void> {
-    try {
-      const characterState = JSON.parse(jsonString);
-      
-      // Validate the imported state
-      if (!characterState || typeof characterState !== 'object') {
-        throw new Error('Invalid character state format');
-      }
-      
-      console.log('📥 Importing character state:', characterState);
-      
-      // Load the model if specified
-      if (characterState.modelPath) {
-        const result = await this.modelManager.loadModel(characterState.modelPath);
-        if (result.success) {
-          this.character = result.character;
-          
-          // Apply model settings
-          if (characterState.modelSettings) {
-            this.character.updateSettings(characterState.modelSettings);
-            this.renderer.updateGLTFSettings(characterState.modelSettings);
-          }
-          
-          // Apply bone rotations
-          if (characterState.boneRotations) {
-            this.renderer.setBoneRotations(characterState.boneRotations);
-          }
-          
-          // Restore selected joint
-          if (characterState.selectedJoint) {
-            this.selectedJoint = characterState.selectedJoint;
-            const bone = this.renderer.getBoneByName(characterState.selectedJoint);
-            if (bone) {
-              // Show joint details via JointDetailBox
-              const worldPosition = new THREE.Vector3();
-              bone.getWorldPosition(worldPosition);
-              const rotation = {
-                x: bone.rotation.x * 180 / Math.PI,
-                y: bone.rotation.y * 180 / Math.PI,
-                z: bone.rotation.z * 180 / Math.PI,
-              };
-              this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
-              this.renderer.highlightBoneControl(characterState.selectedJoint);
-            }
-          }
-          
-          // Save the imported state
-          this.saveCurrentStateImmediate();
-          
-          this.showMessage('Character state imported successfully', 'success');
-        } else {
-          this.showMessage(`Error loading model: ${result.error}`, 'error');
-        }
-      } else {
-        // No model specified, just apply bone rotations
-        if (characterState.boneRotations) {
-          this.renderer.setBoneRotations(characterState.boneRotations);
-        }
-        
-        // Restore selected joint
-        if (characterState.selectedJoint) {
-          this.selectedJoint = characterState.selectedJoint;
-          const bone = this.renderer.getBoneByName(characterState.selectedJoint);
-          if (bone) {
-            // Show joint details via JointDetailBox
-            const worldPosition = new THREE.Vector3();
-            bone.getWorldPosition(worldPosition);
-            const rotation = {
-              x: bone.rotation.x * 180 / Math.PI,
-              y: bone.rotation.y * 180 / Math.PI,
-              z: bone.rotation.z * 180 / Math.PI,
-            };
-            this.jointDetailBox.show(bone.name, worldPosition, rotation, true);
-            this.renderer.highlightBoneControl(characterState.selectedJoint);
-          }
-        }
-        
-        // Save the imported state
-        this.saveCurrentStateImmediate();
-        
-        this.showMessage('Character pose imported successfully', 'success');
-      }
-      
-    } catch (error) {
-      this.showMessage(`Error importing character state: ${error}`, 'error');
-    }
-  }
-
   private updateModelSettingsUI(modelSettings: GLTFModelSettings): void {
     // Update opacity slider
     const modelOpacitySlider = document.getElementById('model-opacity') as HTMLInputElement;
@@ -1811,76 +1753,6 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
     
     // Final fallback: use a point along the ray
     return raycaster.ray.origin.clone().add(raycaster.ray.direction.multiplyScalar(5));
-  }
-
-  public exportPoseAsJson(): any {
-    const boneRotations = this.renderer.getBoneRotations();
-    const modelSettings = this.character.getSettings();
-    
-    return {
-      timestamp: new Date().toISOString(),
-      modelPath: this.character.modelPath,
-      modelSettings: modelSettings,
-      boneRotations: Object.fromEntries(
-        Object.entries(boneRotations).map(([name, euler]) => [
-          name,
-          {
-            x: euler.x,
-            y: euler.y,
-            z: euler.z,
-            order: euler.order
-          }
-        ])
-      ),
-      metadata: {
-        appVersion: '1.0.0',
-        boneCount: Object.keys(boneRotations).length,
-        description: 'Exported from 3D Character Poser'
-      }
-    };
-  }
-
-  public async importPoseFromJson(jsonData: any): Promise<void> {
-    try {
-      // Import model if different
-      if (jsonData.modelPath && jsonData.modelPath !== this.character.modelPath) {
-        const result = await this.modelManager.loadModel(jsonData.modelPath);
-        if (result.success) {
-          this.character = result.character;
-        } else {
-          this.showMessage(`Error loading model: ${result.error}`, 'error');
-          return;
-        }
-      }
-
-      // Import model settings
-      if (jsonData.modelSettings) {
-        this.character.updateSettings(jsonData.modelSettings);
-        this.renderer.updateGLTFSettings(jsonData.modelSettings);
-      }
-
-      // Import bone rotations
-      if (jsonData.boneRotations) {
-        const rotations: Record<string, THREE.Euler> = {};
-        Object.entries(jsonData.boneRotations).forEach(([name, rotData]: [string, any]) => {
-          rotations[name] = new THREE.Euler(
-            rotData.x,
-            rotData.y,
-            rotData.z,
-            rotData.order
-          );
-        });
-        this.renderer.setBoneRotations(rotations);
-      }
-
-      // Save the current state
-      this.saveCurrentStateImmediate();
-
-      console.log('✅ Pose imported successfully from JSON');
-    } catch (error) {
-      console.error('❌ Error importing pose from JSON:', error);
-      throw error;
-    }
   }
 
   // Debug method to test state saving manually

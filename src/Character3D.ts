@@ -384,6 +384,100 @@ export class Character3D {
     };
   }
 
+  // Pose import/export methods
+  public exportPose(): any {
+    const currentPose = this.getCurrentPose();
+    
+    return {
+      timestamp: new Date().toISOString(),
+      modelPath: this.modelPath,
+      modelSettings: this.settings,
+      boneRotations: this.serializePose(currentPose),
+      metadata: {
+        appVersion: '1.0.0',
+        boneCount: Object.keys(currentPose).length,
+        description: 'Exported from 3D Character Poser',
+        characterName: this.metadata.name
+      }
+    };
+  }
+
+  public async importPose(jsonData: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Validate the data structure
+      if (!jsonData || typeof jsonData !== 'object') {
+        return { success: false, error: 'Invalid pose data format' };
+      }
+
+      // Import model settings if provided
+      if (jsonData.modelSettings) {
+        this.updateSettings(jsonData.modelSettings);
+      }
+
+      // Import bone rotations if provided
+      if (jsonData.boneRotations) {
+        const rotations = this.deserializePose(jsonData.boneRotations);
+        this.applyPose(rotations);
+      }
+
+      console.log('✅ Pose imported successfully to Character3D');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Error importing pose to Character3D:', error);
+      return { success: false, error: String(error) };
+    }
+  }
+
+  public exportCharacterState(): any {
+    return {
+      modelPath: this.modelPath,
+      modelSettings: this.settings,
+      boneRotations: this.serializePose(this.getCurrentPose()),
+      defaultPose: this.serializePose(this.defaultPose),
+      timestamp: Date.now(),
+      version: '1.0.0',
+      metadata: this.metadata
+    };
+  }
+
+  public async importCharacterState(characterState: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Validate the imported state
+      if (!characterState || typeof characterState !== 'object') {
+        return { success: false, error: 'Invalid character state format' };
+      }
+
+      console.log('📥 Importing character state to Character3D:', characterState);
+
+      // Apply model settings
+      if (characterState.modelSettings) {
+        this.updateSettings(characterState.modelSettings);
+      }
+
+      // Apply bone rotations
+      if (characterState.boneRotations) {
+        const rotations = this.deserializePose(characterState.boneRotations);
+        this.applyPose(rotations);
+      }
+
+      // Restore default pose
+      if (characterState.defaultPose) {
+        this.defaultPose = this.deserializePose(characterState.defaultPose);
+      }
+
+      // Update metadata if provided
+      if (characterState.metadata) {
+        this.metadata = { ...this.metadata, ...characterState.metadata };
+      }
+
+      console.log('✅ Character state imported successfully to Character3D');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Error importing character state to Character3D:', error);
+      return { success: false, error: String(error) };
+    }
+  }
+
   // Cleanup
   public dispose(): void {
     console.log(`🧹 Disposing character: ${this.metadata.name}`);
