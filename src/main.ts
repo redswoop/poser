@@ -40,7 +40,6 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
   private poseCommands: PoseCommands;
   private settingsControls: SettingsControls;
   private ikControls: IKControls;
-  private jsonPoseEditor: JsonPoseEditor;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -320,7 +319,7 @@ class StickFigureApp3D implements JsonPoseEditorCallbacks {
     });
 
     // Initialize JSON Pose Editor
-    this.jsonPoseEditor = new JsonPoseEditor({
+    new JsonPoseEditor({
       exportPoseAsJson: () => this.exportPoseAsJson(),
       importPoseFromJson: (jsonData: any) => this.importPoseFromJson(jsonData),
       showMessage: (message: string, type: 'success' | 'error' | 'info' | 'warning') => this.showMessage(message, type)
