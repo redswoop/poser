@@ -209,6 +209,14 @@ export class GLTFBoneController {
         return depths;
     }
 
+    public getSkeleton(): THREE.Skeleton {
+        return this.skeleton;
+    }
+
+    public getSkinnedMesh(): THREE.SkinnedMesh | null {
+        return this.mesh;
+    }
+
     /**
      * Create an IK chain from bone names
      */

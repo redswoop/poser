@@ -421,6 +421,18 @@ export class ThreeRenderer {
     return this.gltfRenderer.getSettings();
   }
 
+  public getGLTFModel(): THREE.Group | null {
+    return this.gltfRenderer.getModel();
+  }
+
+  public getGLTFSkeleton(): THREE.Skeleton | null {
+    return this.gltfRenderer.getSkeleton();
+  }
+
+  public getGLTFSkinnedMesh(): THREE.SkinnedMesh | null {
+    return this.gltfRenderer.getSkinnedMesh();
+  }
+
   public getSettings(): SceneSettings {
     return { ...this.settings };
   }

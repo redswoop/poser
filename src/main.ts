@@ -8,18 +8,22 @@ import { ThreeRenderer } from './ThreeRenderer';
 import { UndoRedoManager } from './UndoRedoManager';
 import { UndoRedoControls } from './UndoRedoControls';
 import { JointDetailBox } from './JointDetailBox';
+import { Character3D } from './Character3D';
+import { ModelManager } from './ModelManager';
+import { DebugManager } from './DebugManager';
 import type { GLTFModelSettings } from './types';
 
 class StickFigureApp3D {
   private renderer!: ThreeRenderer;
+  private modelManager!: ModelManager;
+  private debugManager!: DebugManager;
   private undoRedoManager: UndoRedoManager;
   private undoRedoControls: UndoRedoControls;
+  private character: Character3D;
   private isDragging = false;
   private dragTarget: { bone: THREE.Bone; control: THREE.Object3D; originalRotation: THREE.Euler } | null = null;
   private dragStartState: any = null;
   private selectedJoint: string | null = null;
-  private currentModelPath: string | null = null;
-  private currentModelSettings: GLTFModelSettings | null = null;
   private ikMode: boolean = false;
   private activeIKChain: string | null = null;
   
@@ -27,9 +31,6 @@ class StickFigureApp3D {
   private interactiveIKMode: boolean = false;
   private ikDragTarget: { targetName: string; control: THREE.Object3D; originalPosition: THREE.Vector3 } | null = null;
   private altPressed: boolean = false;
-  
-  // Store the default pose from when the model was first loaded
-  private defaultPose: Record<string, THREE.Euler> | null = null;
 
   // UI Elements
   private canvasContainer: HTMLElement;
@@ -45,6 +46,7 @@ class StickFigureApp3D {
 
   constructor() {
     this.undoRedoManager = new UndoRedoManager();
+    this.character = new Character3D();
     
     // Get UI elements
     this.canvasContainer = document.getElementById('three-canvas')!;
@@ -116,85 +118,15 @@ class StickFigureApp3D {
     const existingState = localStorage.getItem('poser3d-app-state');
     console.log('🔍 Initial state check:', existingState ? JSON.parse(existingState) : 'No saved state found');
     
-    // Add debug methods to window for testing
-    (window as any).debugIK = () => {
-      const boneController = this.renderer.getBoneController();
-      if (boneController) {
-        console.log('🦾 IK Debug Info:');
-        console.log('- IK Chains:', boneController.getIKChainNames());
-        console.log('- IK Mode:', (boneController as any).ikMode);
-        console.log('- IK Targets:', (boneController as any).ikTargets);
-        console.log('- Interactive IK Mode:', this.interactiveIKMode);
-        console.log('- Alt Pressed:', this.altPressed);
-        
-        // Debug IK targets
-        const ikTargets = (boneController as any).ikTargets;
-        if (ikTargets) {
-          console.log('🎯 IK Target Details:');
-          ikTargets.forEach((target: any, targetName: string) => {
-            console.log(`  - ${targetName}:`, {
-              boneName: target.userData?.boneName,
-              chainName: target.userData?.chainName,
-              boneIndex: target.userData?.boneIndex,
-              visible: target.visible,
-              position: target.position
-            });
-          });
-        }
-      }
-    };
-    
-    (window as any).debugBones = () => {
-      const boneController = this.renderer.getBoneController();
-      if (boneController) {
-        const skeleton = (boneController as any).skeleton;
-        if (skeleton) {
-          console.log('🦴 Available Bones:');
-          skeleton.bones.forEach((bone: any, index: number) => {
-            console.log(`  ${index}: ${bone.name}`);
-          });
-          
-          // Specifically look for elbow and knee-like bones
-          console.log('\n🔍 Looking for elbow-like bones:');
-          const elbowBones = skeleton.bones.filter((bone: any) => {
-            const name = bone.name.toLowerCase();
-            return name.includes('elbow') || name.includes('forearm') || name.includes('lowerarm') || name.includes('lower_arm');
-          });
-          elbowBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
-          
-          console.log('\n🔍 Looking for knee-like bones:');
-          const kneeBones = skeleton.bones.filter((bone: any) => {
-            const name = bone.name.toLowerCase();
-            return name.includes('knee') || name.includes('leg') || name.includes('shin') || name.includes('calf') || name.includes('lowerleg') || name.includes('lower_leg');
-          });
-          kneeBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
-          
-          console.log('\n🔍 Looking for all arm bones:');
-          const armBones = skeleton.bones.filter((bone: any) => {
-            const name = bone.name.toLowerCase();
-            return name.includes('arm') || name.includes('hand') || name.includes('shoulder') || name.includes('elbow');
-          });
-          armBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
-          
-          console.log('\n🔍 Looking for all leg bones:');
-          const legBones = skeleton.bones.filter((bone: any) => {
-            const name = bone.name.toLowerCase();
-            return name.includes('leg') || name.includes('foot') || name.includes('thigh') || name.includes('knee') || name.includes('shin') || name.includes('calf');
-          });
-          legBones.forEach((bone: any) => console.log(`  Found: ${bone.name}`));
-        }
-      }
-    };
-    
-    (window as any).testIKMode = () => {
-      this.enterInteractiveIKMode();
-    };
+    // Initialize debug manager and setup debug commands
+    this.debugManager = new DebugManager(this);
+    this.debugManager.setupDebugCommands();
     
     // Load saved state before auto-loading default model
     this.loadSavedState().then(() => {
       // Auto-load the default GLB model if no saved state or model
       setTimeout(() => {
-        if (!this.currentModelPath) {
+        if (!this.character.modelPath) {
           console.log('🎭 No saved model found, loading default model');
           this.loadDefaultModel();
         } else {
@@ -207,6 +139,38 @@ class StickFigureApp3D {
   private initializeRenderer(): void {
     this.renderer = new ThreeRenderer(this.canvasContainer);
     this.renderer.setMovementPlane('camera-relative');
+    
+    // Initialize ModelManager after renderer is ready
+    this.modelManager = new ModelManager(this.renderer);
+    this.setupModelManagerEvents();
+  }
+
+  private setupModelManagerEvents(): void {
+    // Listen for model loading events
+    this.modelManager.addEventListener('model-loaded', (e: Event) => {
+      const event = e as CustomEvent;
+      this.character = event.detail.character;
+      this.onModelLoaded();
+    });
+
+    this.modelManager.addEventListener('model-load-failed', (e: Event) => {
+      const event = e as CustomEvent;
+      this.showMessage(`Model loading failed: ${event.detail.error}`, 'error');
+    });
+
+    this.modelManager.addEventListener('loading-started', (e: Event) => {
+      const event = e as CustomEvent;
+      console.log(`🔄 Loading model: ${event.detail.path}`);
+    });
+  }
+
+  private onModelLoaded(): void {
+    // Centralized post-loading setup
+    this.renderer.focusOnGLTFModel();
+    this.updateIKChainsList();
+    this.updateBoneDepthSlider();
+    this.saveCurrentStateImmediate();
+    this.showMessage('Model loaded successfully', 'success');
   }
 
   private setupEventListeners(): void {
@@ -272,30 +236,32 @@ class StickFigureApp3D {
     this.settingsControls.rootElement.addEventListener('load-model', async (e) => {
       const file = (e as CustomEvent<File>).detail;
       const url = URL.createObjectURL(file);
-      try {
-        await this.loadModelFromPath(url);
+      
+      const result = await this.modelManager.loadModel(url);
+      if (result.success) {
+        this.character = result.character;
         this.showMessage(`Loaded 3D model: ${file.name}`, 'success');
         this.saveCurrentStateImmediate();
-      } catch (error) {
-        this.showMessage(`Error loading model: ${error}`, 'error');
+      } else {
+        this.showMessage(`Error loading model: ${result.error}`, 'error');
       }
     });
     this.settingsControls.rootElement.addEventListener('toggle-model-visibility', (e) => {
       const visible = (e as CustomEvent<boolean>).detail;
+      this.character.updateSettings({ showModel: visible });
       this.renderer.setGLTFVisible(visible);
-      this.currentModelSettings = this.renderer.getGLTFSettings();
       this.saveCurrentStateDebounced();
     });
     this.settingsControls.rootElement.addEventListener('model-opacity-change', (e) => {
       const value = (e as CustomEvent<number>).detail;
+      this.character.updateSettings({ modelOpacity: value });
       this.renderer.updateGLTFSettings({ modelOpacity: value });
-      this.currentModelSettings = this.renderer.getGLTFSettings();
       this.saveCurrentStateDebounced();
     });
     this.settingsControls.rootElement.addEventListener('model-scale-change', (e) => {
       const value = (e as CustomEvent<number>).detail;
+      this.character.updateSettings({ modelScale: value });
       this.renderer.updateGLTFSettings({ modelScale: value });
-      this.currentModelSettings = this.renderer.getGLTFSettings();
       this.saveCurrentStateDebounced();
     });
     this.settingsControls.rootElement.addEventListener('bone-depth-limit-change', (e) => {
@@ -332,9 +298,9 @@ class StickFigureApp3D {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           const jsonString = e.target?.result as string;
-          this.importCharacterState(jsonString);
+          await this.importCharacterState(jsonString);
         };
         reader.readAsText(file);
         
@@ -368,29 +334,31 @@ class StickFigureApp3D {
       const customEvent = event as CustomEvent;
       this.setupBoneControlInteraction(customEvent.detail.controls);
       
-      // Make sure bone controls are visible initially
+      // Set up character with bone controller and GLTF objects
       const boneController = this.renderer.getBoneController();
+      const gltfModel = this.renderer.getGLTFModel();
+      const skeleton = this.renderer.getGLTFSkeleton();
+      const skinnedMesh = this.renderer.getGLTFSkinnedMesh();
+      
       if (boneController) {
-        console.log('🔧 Setting up initial bone control visibility');
-        this.renderer.boneControlMode = true;
-        this.renderer.updateBoneController();
-        
-        // Apply saved bone depth limit if available
-        this.applySavedBoneDepthLimit();
+        this.character.setBoneController(boneController);
       }
+      
+      if (gltfModel && skeleton && skinnedMesh) {
+        this.character.setModel(gltfModel, skeleton, skinnedMesh);
+        console.log('🎭 Character model objects set successfully');
+      }
+      
+      console.log('🔧 Setting up initial bone control visibility');
+      this.renderer.boneControlMode = true;
+      this.renderer.updateBoneController();
+      
+      // Apply saved bone depth limit if available
+      this.applySavedBoneDepthLimit();
       
       // Capture the default pose when model is first loaded
       setTimeout(() => {
-        const currentBoneRotations = this.renderer.getBoneRotations();
-        if (Object.keys(currentBoneRotations).length > 0) {
-          // Clone the rotations to store as default pose
-          const defaultRotations: Record<string, THREE.Euler> = {};
-          Object.entries(currentBoneRotations).forEach(([boneName, euler]) => {
-            defaultRotations[boneName] = euler.clone();
-          });
-          this.defaultPose = defaultRotations;
-          console.log('💾 Default pose captured:', Object.keys(defaultRotations).length, 'bones');
-        }
+        this.character.captureDefaultPose();
       }, 100);
       
       // Update IK chains list when model is loaded
@@ -739,24 +707,19 @@ class StickFigureApp3D {
   }
 
   private async loadDefaultModel(): Promise<void> {
-    const defaultModelPath = '/robot.glb';
-    
     try {
-      console.log('🎭 Loading default GLB model...');
-      await this.loadModelFromPath(defaultModelPath);
+      console.log('🎭 Loading default model via ModelManager...');
+      const result = await this.modelManager.loadDefaultModel();
       
-      // Focus the camera on the loaded model
-      console.log('📷 Focusing camera on loaded GLB model...');
-      this.renderer.focusOnGLTFModel();
-      
-      console.log('✅ Default GLB model loaded successfully');
-      this.showMessage('Default character model loaded automatically', 'success');
-      
-      // Save the state after loading the default model
-      this.saveCurrentStateImmediate();
-      
+      if (result.success) {
+        this.character = result.character;
+        console.log('✅ Default model loaded successfully via ModelManager');
+      } else {
+        console.warn('⚠️ Could not load default model:', result.error);
+        console.log('ℹ️ Continuing without default model - you can load one manually');
+      }
     } catch (error) {
-      console.warn('⚠️ Could not load default GLB model:', error);
+      console.warn('⚠️ Error loading default model:', error);
       console.log('ℹ️ Continuing without default model - you can load one manually');
     }
   }
@@ -865,7 +828,9 @@ class StickFigureApp3D {
     const beforeState = this.undoRedoManager.undo();
     if (beforeState) {
       console.log(`Undoing bone movement`);
-      this.restoreState(beforeState);
+      this.restoreState(beforeState).catch(error => {
+        console.warn('⚠️ Error during undo:', error);
+      });
       this.showMessage(`Undid bone movement`, 'info');
     } else {
       this.showMessage('Nothing to undo', 'warning');
@@ -878,7 +843,9 @@ class StickFigureApp3D {
     const afterState = this.undoRedoManager.redo();
     if (afterState) {
       console.log(`Redoing bone movement`);
-      this.restoreState(afterState);
+      this.restoreState(afterState).catch(error => {
+        console.warn('⚠️ Error during redo:', error);
+      });
       this.showMessage(`Redid bone movement`, 'info');
     } else {
       this.showMessage('Nothing to redo', 'warning');
@@ -886,7 +853,7 @@ class StickFigureApp3D {
     this.updateUndoRedoUI();
   }
 
-  private restoreState(state: any): void {
+  private async restoreState(state: any): Promise<void> {
     console.log('🔄 Restoring state', state);
     
     if (state.boneRotations) {
@@ -894,14 +861,17 @@ class StickFigureApp3D {
     }
     
     // Restore model if it has changed
-    if (state.modelPath && state.modelPath !== this.currentModelPath) {
-      this.loadModelFromPath(state.modelPath).then(() => {
+    if (state.modelPath && state.modelPath !== this.character.modelPath) {
+      const result = await this.modelManager.loadModel(state.modelPath);
+      if (result.success) {
+        this.character = result.character;
         if (state.modelSettings) {
+          this.character.updateSettings(state.modelSettings);
           this.renderer.updateGLTFSettings(state.modelSettings);
         }
-      }).catch(error => {
-        console.warn('⚠️ Could not restore model during undo/redo:', error);
-      });
+      } else {
+        console.warn('⚠️ Could not restore model during undo/redo:', result.error);
+      }
     }
     
     // Save the current state to keep it in sync
@@ -1062,8 +1032,8 @@ class StickFigureApp3D {
     return {
       timestamp: Date.now(),
       boneRotations: this.renderer.getBoneRotations(),
-      modelPath: this.currentModelPath,
-      modelSettings: this.currentModelSettings,
+      modelPath: this.character.modelPath,
+      modelSettings: this.character.getSettings(),
       boneDepthLimit: this.renderer.getBoneDepthLimit()
     };
   }
@@ -1248,9 +1218,13 @@ class StickFigureApp3D {
       const state = JSON.parse(savedState);
       console.log('📥 Parsed saved state:', state);
       
-      // Restore model path and settings
-      this.currentModelPath = state.modelPath || null;
-      this.currentModelSettings = state.modelSettings || null;
+      // Restore model path and settings to character
+      if (state.modelPath) {
+        this.character.modelPath = state.modelPath;
+      }
+      if (state.modelSettings) {
+        this.character.updateSettings(state.modelSettings);
+      }
       
       // Restore default pose
       if (state.defaultPose) {
@@ -1258,47 +1232,64 @@ class StickFigureApp3D {
         Object.entries(state.defaultPose).forEach(([name, rotData]: [string, any]) => {
           defaultRotations[name] = new THREE.Euler(rotData.x, rotData.y, rotData.z, rotData.order as THREE.EulerOrder);
         });
-        this.defaultPose = defaultRotations;
+        this.character.defaultPose = defaultRotations;
         console.log('🔄 Default pose restored:', Object.keys(defaultRotations).length, 'bones');
       }
       
       // Load model if we have one
-      if (this.currentModelPath) {
-        console.log('🔄 Loading saved model:', this.currentModelPath);
+      if (this.character.modelPath) {
+        console.log('🔄 Loading saved model:', this.character.modelPath);
         try {
-          await this.loadModelFromPath(this.currentModelPath, true); // Preserve settings
-          
-          // Apply model settings after model is loaded (with a small delay to ensure model is ready)
-          setTimeout(() => {
-            if (this.currentModelSettings) {
-              console.log('🎛️ Applying saved model settings:', this.currentModelSettings);
-              
-              // Apply to renderer
-              this.renderer.updateGLTFSettings(this.currentModelSettings);
-              
-              // Update UI to reflect the loaded settings
-              this.updateModelSettingsUI(this.currentModelSettings);
-              
-              // Verify the settings were applied
-              const appliedSettings = this.renderer.getGLTFSettings();
-              console.log('✅ Settings applied. Current renderer settings:', appliedSettings);
-            }
-          }, 100);
-          
-          // Restore bone rotations
-          if (state.boneRotations && Object.keys(state.boneRotations).length > 0) {
-            console.log('🦴 Restoring bone rotations:', Object.keys(state.boneRotations).length, 'bones');
+          const result = await this.modelManager.loadModel(this.character.modelPath);
+          if (result.success) {
+            this.character = result.character;
             
-            // Wait for model to be fully loaded
+            // Apply model settings after model is loaded (with a small delay to ensure model is ready)
             setTimeout(() => {
-              const rotationsToApply: Record<string, THREE.Euler> = {};
-              Object.entries(state.boneRotations).forEach(([key, rotation]: [string, any]) => {
-                rotationsToApply[key] = new THREE.Euler(rotation.x, rotation.y, rotation.z, rotation.order as THREE.EulerOrder);
-              });
+              const savedSettings = this.character.getSettings();
+              if (savedSettings) {
+                console.log('🎛️ Applying saved model settings:', savedSettings);
+                
+                // Apply to renderer
+                this.renderer.updateGLTFSettings(savedSettings);
+                
+                // Update UI to reflect the loaded settings
+                this.updateModelSettingsUI(savedSettings);
+                
+                // Verify the settings were applied
+                const appliedSettings = this.renderer.getGLTFSettings();
+                console.log('✅ Settings applied. Current renderer settings:', appliedSettings);
+              }
+            }, 100);
+            
+            // Restore bone rotations
+            if (state.boneRotations && Object.keys(state.boneRotations).length > 0) {
+              console.log('🦴 Restoring bone rotations:', Object.keys(state.boneRotations).length, 'bones');
               
-              this.renderer.setBoneRotations(rotationsToApply);
-              console.log('✅ Bone rotations restored');
-            }, 1000);
+              // Wait for model to be fully loaded
+              setTimeout(() => {
+                const rotationsToApply: Record<string, THREE.Euler> = {};
+                Object.entries(state.boneRotations).forEach(([key, rotation]: [string, any]) => {
+                  rotationsToApply[key] = new THREE.Euler(rotation.x, rotation.y, rotation.z, rotation.order as THREE.EulerOrder);
+                });
+                
+                this.renderer.setBoneRotations(rotationsToApply);
+                console.log('✅ Bone rotations restored');
+              }, 1000);
+            }
+          } else {
+            console.warn('⚠️ Could not load saved model:', result.error);
+            console.log('🔄 Clearing problematic model path from state');
+            
+            // Clear the problematic model path to prevent repeated failures
+            this.character.modelPath = '';
+            this.character.updateSettings({ modelPath: '' });
+            
+            // Show user-friendly message
+            this.showMessage('Saved model could not be loaded. Continuing without it.', 'warning');
+            
+            // Don't save this broken state - let the app load the default model instead
+            console.log('💡 Will load default model instead');
           }
           
         } catch (error) {
@@ -1306,8 +1297,8 @@ class StickFigureApp3D {
           console.log('🔄 Clearing problematic model path from state');
           
           // Clear the problematic model path to prevent repeated failures
-          this.currentModelPath = null;
-          this.currentModelSettings = null;
+          this.character.modelPath = '';
+          this.character.updateSettings({ modelPath: '' });
           
           // Show user-friendly message
           this.showMessage('Saved model could not be loaded. Continuing without it.', 'warning');
@@ -1414,40 +1405,6 @@ class StickFigureApp3D {
     }
   }
 
-  private async loadModelFromPath(modelPath: string, preserveSettings: boolean = false): Promise<void> {
-    try {
-      console.log(`🎭 Loading model from path: ${modelPath}`);
-      await this.renderer.loadGLTFModel(modelPath);
-      
-      // Update current model info
-      this.currentModelPath = modelPath;
-      
-      if (!preserveSettings) {
-        // Normal loading - get current settings and enable model
-        this.currentModelSettings = this.renderer.getGLTFSettings();
-        
-        // Enable the GLTF model display
-        this.renderer.updateGLTFSettings({ showModel: true });
-        
-        // Update the UI checkbox
-        const showGltfModelCheckbox = document.getElementById('show-gltf-model') as HTMLInputElement;
-        if (showGltfModelCheckbox) {
-          showGltfModelCheckbox.checked = true;
-        }
-      }
-      
-      // Initialize bone depth slider after model is loaded
-      setTimeout(() => {
-        this.updateBoneDepthSlider();
-      }, 200);
-      
-      console.log('✅ Model loaded successfully');
-    } catch (error) {
-      console.error('❌ Failed to load model:', error);
-      throw error;
-    }
-  }
-
   private saveCurrentState(): void {
     console.log('💾 === ACTUALLY SAVING STATE NOW ===');
     
@@ -1485,12 +1442,12 @@ class StickFigureApp3D {
       // Complete state object
       const state = {
         timestamp: Date.now(),
-        modelPath: this.currentModelPath,
-        modelSettings: this.currentModelSettings,
+        modelPath: this.character.modelPath,
+        modelSettings: this.character.getSettings(),
         sceneSettings: sceneSettings,
         boneRotations: serializedBoneRotations,
-        defaultPose: this.defaultPose ? Object.fromEntries(
-          Object.entries(this.defaultPose).map(([name, euler]) => [
+        defaultPose: this.character.defaultPose ? Object.fromEntries(
+          Object.entries(this.character.defaultPose).map(([name, euler]) => [
             name,
             { x: euler.x, y: euler.y, z: euler.z, order: euler.order }
           ])
@@ -1553,8 +1510,8 @@ class StickFigureApp3D {
 
   public exportCharacterState(): string {
     const characterState = {
-      modelPath: this.currentModelPath,
-      modelSettings: this.currentModelSettings,
+      modelPath: this.character.modelPath,
+      modelSettings: this.character.getSettings(),
       boneRotations: this.renderer.getBoneRotations(),
       selectedJoint: this.selectedJoint,
       timestamp: Date.now(),
@@ -1564,7 +1521,7 @@ class StickFigureApp3D {
     return JSON.stringify(characterState, null, 2);
   }
 
-  public importCharacterState(jsonString: string): void {
+  public async importCharacterState(jsonString: string): Promise<void> {
     try {
       const characterState = JSON.parse(jsonString);
       
@@ -1577,9 +1534,13 @@ class StickFigureApp3D {
       
       // Load the model if specified
       if (characterState.modelPath) {
-        this.loadModelFromPath(characterState.modelPath).then(() => {
+        const result = await this.modelManager.loadModel(characterState.modelPath);
+        if (result.success) {
+          this.character = result.character;
+          
           // Apply model settings
           if (characterState.modelSettings) {
+            this.character.updateSettings(characterState.modelSettings);
             this.renderer.updateGLTFSettings(characterState.modelSettings);
           }
           
@@ -1610,9 +1571,9 @@ class StickFigureApp3D {
           this.saveCurrentStateImmediate();
           
           this.showMessage('Character state imported successfully', 'success');
-        }).catch(error => {
-          this.showMessage(`Error loading model: ${error}`, 'error');
-        });
+        } else {
+          this.showMessage(`Error loading model: ${result.error}`, 'error');
+        }
       } else {
         // No model specified, just apply bone rotations
         if (characterState.boneRotations) {
@@ -1765,11 +1726,11 @@ class StickFigureApp3D {
     });
 
     // Save pose
-    saveBtn?.addEventListener('click', () => {
+    saveBtn?.addEventListener('click', async () => {
       if (textarea) {
         try {
           const jsonData = JSON.parse(textarea.value);
-          this.importPoseFromJson(jsonData);
+          await this.importPoseFromJson(jsonData);
           closeModal();
           this.showMessage('Pose imported successfully!', 'success');
         } catch (error) {
@@ -1796,24 +1757,24 @@ class StickFigureApp3D {
   }
 
   private setupIKChains(): void {
-    const boneController = this.renderer.getBoneController();
-    if (!boneController) {
+    if (!this.character.isLoaded()) {
       this.showMessage('No model loaded', 'error');
       return;
     }
 
-    boneController.createCommonIKChains();
-    this.updateIKChainsList();
-    this.showMessage('IK chains created!', 'success');
+    const success = this.character.setupIKChains();
+    if (success) {
+      this.updateIKChainsList();
+      this.showMessage('IK chains created!', 'success');
+    } else {
+      this.showMessage('Failed to setup IK chains', 'error');
+    }
   }
 
   private clearIKChains(): void {
-    const boneController = this.renderer.getBoneController();
-    if (boneController) {
-      boneController.clearIKChains();
-      this.updateIKChainsList();
-      this.showMessage('IK chains cleared', 'info');
-    }
+    this.character.clearIKChains();
+    this.updateIKChainsList();
+    this.showMessage('IK chains cleared', 'info');
   }
 
   private testIK(): void {
@@ -1844,11 +1805,12 @@ class StickFigureApp3D {
   }
 
   private updateIKChainsList(): void {
-    // Build chain data and delegate rendering to IKControls
-    const boneController = this.renderer.getBoneController();
-    const chains = boneController
-      ? boneController.getIKChainNames().map((name: string) => ({ chainName: name, bones: boneController.getIKChainBones(name) }))
-      : [];
+    // Build chain data using character's IK chains
+    const chainNames = this.character.getIKChainNames();
+    const chains = chainNames.map((name: string) => {
+      const bones = this.character.boneController?.getIKChainBones(name) || [];
+      return { chainName: name, bones };
+    });
     this.ikControls.updateChainsList(chains);
   }
 
@@ -1873,10 +1835,7 @@ class StickFigureApp3D {
   private handleIKClick(worldPosition: THREE.Vector3): void {
     if (!this.ikMode || !this.activeIKChain) return;
 
-    const boneController = this.renderer.getBoneController();
-    if (!boneController) return;
-
-    const success = boneController.solveIK(this.activeIKChain, worldPosition);
+    const success = this.character.solveIK(this.activeIKChain, worldPosition);
     if (success) {
       this.showMessage(`IK solved for ${this.activeIKChain}!`, 'success');
       // Add to undo history
@@ -1943,11 +1902,11 @@ class StickFigureApp3D {
 
   private exportPoseAsJson(): any {
     const boneRotations = this.renderer.getBoneRotations();
-    const modelSettings = this.renderer.getGLTFSettings();
+    const modelSettings = this.character.getSettings();
     
     return {
       timestamp: new Date().toISOString(),
-      modelPath: this.currentModelPath,
+      modelPath: this.character.modelPath,
       modelSettings: modelSettings,
       boneRotations: Object.fromEntries(
         Object.entries(boneRotations).map(([name, euler]) => [
@@ -1968,17 +1927,23 @@ class StickFigureApp3D {
     };
   }
 
-  private importPoseFromJson(jsonData: any): void {
+  private async importPoseFromJson(jsonData: any): Promise<void> {
     try {
       // Import model if different
-      if (jsonData.modelPath && jsonData.modelPath !== this.currentModelPath) {
-        this.loadModelFromPath(jsonData.modelPath, true);
+      if (jsonData.modelPath && jsonData.modelPath !== this.character.modelPath) {
+        const result = await this.modelManager.loadModel(jsonData.modelPath);
+        if (result.success) {
+          this.character = result.character;
+        } else {
+          this.showMessage(`Error loading model: ${result.error}`, 'error');
+          return;
+        }
       }
 
       // Import model settings
       if (jsonData.modelSettings) {
+        this.character.updateSettings(jsonData.modelSettings);
         this.renderer.updateGLTFSettings(jsonData.modelSettings);
-        this.currentModelSettings = jsonData.modelSettings;
       }
 
       // Import bone rotations
@@ -2045,7 +2010,7 @@ class StickFigureApp3D {
     console.log('📂 Current panel states:', panelStates);
     
     // Test default pose
-    console.log('🎭 Default pose available:', this.defaultPose ? Object.keys(this.defaultPose).length + ' bones' : 'None');
+    console.log('🎭 Default pose available:', this.character.defaultPose ? Object.keys(this.character.defaultPose).length + ' bones' : 'None');
   }
 
   // Debug method to clear saved state
@@ -2056,7 +2021,12 @@ class StickFigureApp3D {
   }
 
   private resetToDefaultPose(): void {
-    if (!this.defaultPose) {
+    console.log('🔄 resetToDefaultPose called');
+    console.log('🔍 character.defaultPose:', this.character.defaultPose);
+    console.log('🔍 defaultPose keys:', Object.keys(this.character.defaultPose || {}));
+    
+    if (!this.character.defaultPose || Object.keys(this.character.defaultPose).length === 0) {
+      console.warn('⚠️ No default pose available');
       this.showMessage('No default pose available. Load a model first.', 'warning');
       return;
     }
@@ -2067,7 +2037,10 @@ class StickFigureApp3D {
     const beforeState = this.getCurrentState();
     
     // Apply the default pose
-    this.renderer.setBoneRotations(this.defaultPose);
+    this.character.resetToDefault();
+    
+    // Update the renderer to reflect the changes
+    this.renderer.updateBoneController();
     
     // Save action for undo/redo
     this.saveAction('reset-to-default', 'Reset to Default Pose', beforeState);
@@ -2112,6 +2085,13 @@ class StickFigureApp3D {
       console.warn('⚠️ Error applying saved bone depth limit:', error);
     }
   }
+
+  // Getter methods for DebugManager access
+  public getInteractiveIKMode(): boolean { return this.interactiveIKMode; }
+  public getAltPressed(): boolean { return this.altPressed; }
+  public getSelectedJoint(): string | null { return this.selectedJoint; }
+  public getRenderer(): ThreeRenderer { return this.renderer; }
+  public getCharacter(): Character3D { return this.character; }
 }
 
 // Initialize the app when DOM is loaded

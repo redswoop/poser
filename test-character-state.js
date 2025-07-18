@@ -22,7 +22,7 @@ function testCharacterStateSaving() {
   // Test importing character state
   try {
     const testState = {
-      modelPath: '/womenfemale_body_base_rigged.glb',
+      modelPath: '/woman.glb',
       boneRotations: {},
       selectedJoint: null,
       timestamp: Date.now(),

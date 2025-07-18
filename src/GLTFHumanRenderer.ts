@@ -222,6 +222,18 @@ export class GLTFHumanRenderer {
     };
   }
 
+  public getModel(): THREE.Group | null {
+    return this.model;
+  }
+
+  public getSkeleton(): THREE.Skeleton | null {
+    return this.boneController?.getSkeleton() || null;
+  }
+
+  public getSkinnedMesh(): THREE.SkinnedMesh | null {
+    return this.boneController?.getSkinnedMesh() || null;
+  }
+
   public updateCharacterPose(_character: any): void {
     // For compatibility with existing code - this would be where bone poses are updated
     // In the new system, bones are manipulated directly through the bone controller
