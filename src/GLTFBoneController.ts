@@ -44,7 +44,7 @@ export class GLTFBoneController {
     }
 
     private calculateBoneDepths(): void {
-        console.log('🔍 Calculating bone hierarchy depths...');
+        console.groupCollapsed('🔍 Calculating bone hierarchy depths...');
         
         // Calculate depth for each bone based on its hierarchy
         this.skeleton.bones.forEach(bone => {
@@ -56,6 +56,7 @@ export class GLTFBoneController {
         // Calculate max depth
         this.maxDepth = Math.max(...Array.from(this.boneDepthMap.values()));
         console.log(`📊 Max bone depth: ${this.maxDepth}`);
+        console.groupEnd();
     }
 
     private getBoneDepth(bone: THREE.Bone): number {
@@ -83,7 +84,7 @@ export class GLTFBoneController {
             side: THREE.DoubleSide  // Render both sides
         });
 
-        console.log(`🎮 Creating bone controls for ${this.skeleton.bones.length} bones`);
+        console.groupCollapsed(`🎮 Creating bone controls for ${this.skeleton.bones.length} bones`);
 
         this.skeleton.bones.forEach(bone => {
             const control = new THREE.Mesh(geometry, material.clone());
@@ -120,10 +121,10 @@ export class GLTFBoneController {
             this.controls.add(control);
             this.boneControlMap.set(control, bone);
             
-            console.log(`🎮 Created control for bone: ${bone.name} at position: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}, depth: ${depth}`);
+            console.debug(`🎮 Created control for bone: ${bone.name} at position: ${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}, depth: ${depth}`);
         });
-        
-        console.log(`🎮 Total bone controls created: ${this.controls.children.length}`);
+        console.groupEnd();          
+        console.debug(`🎮 Total bone controls created: ${this.controls.children.length}`);
     }
 
     public update(): void {
@@ -170,7 +171,7 @@ export class GLTFBoneController {
     }
 
     public updateVisibilityByDepth(): void {
-        console.log(`👁️ Updating visibility for depth limit: ${this.currentDepthLimit}`);
+        console.groupCollapsed(`👁️ Updating visibility for depth limit: ${this.currentDepthLimit}`);
         
         this.controls.children.forEach(control => {
             if (control.userData.depth !== undefined) {
@@ -185,6 +186,7 @@ export class GLTFBoneController {
         
         const visibleCount = this.controls.children.filter(c => c.visible).length;
         console.log(`👁️ Visible controls: ${visibleCount}/${this.controls.children.length}`);
+        console.groupEnd();
     }
 
     public setDepthLimit(depthLimit: number): void {

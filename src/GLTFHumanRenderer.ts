@@ -46,6 +46,7 @@ export class GLTFHumanRenderer {
       
       let skeleton: THREE.Skeleton | null = null;
       let skinnedMesh: THREE.SkinnedMesh | null = null;
+      console.groupCollapsed("Verbose Model Traversal");
       this.model.traverse((child) => {
         console.log(`🔍 Checking child:`, child.type, child.name);
         if (child instanceof THREE.SkinnedMesh) {
@@ -54,6 +55,7 @@ export class GLTFHumanRenderer {
           console.log(`✅ Found skeleton with ${skeleton.bones.length} bones.`);
         }
       });
+      console.groupEnd();
 
       if (skeleton && skinnedMesh) {
         this.boneController = new GLTFBoneController(this.scene, skeleton, skinnedMesh);

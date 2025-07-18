@@ -1262,9 +1262,10 @@ class StickFigureApp3D {
         return;
       }
       
-      console.log('📦 Raw saved state:', savedState);
+      console.groupCollapsed('📦 Processing Saved State');
       const state = JSON.parse(savedState);
       console.log('📥 Parsed saved state:', state);
+      console.groupEnd();
       
       // Restore model path and settings to character
       if (state.modelPath) {
