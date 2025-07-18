@@ -11,9 +11,10 @@ import { JointDetailBox } from './JointDetailBox';
 import { Character3D } from './Character3D';
 import { ModelManager } from './ModelManager';
 import { DebugManager } from './DebugManager';
+import { JsonPoseEditor, type JsonPoseEditorCallbacks } from './JsonPoseEditor';
 import type { GLTFModelSettings } from './types';
 
-class StickFigureApp3D {
+class StickFigureApp3D implements JsonPoseEditorCallbacks {
   private renderer!: ThreeRenderer;
   private modelManager!: ModelManager;
   private debugManager!: DebugManager;
@@ -39,6 +40,7 @@ class StickFigureApp3D {
   private poseCommands: PoseCommands;
   private settingsControls: SettingsControls;
   private ikControls: IKControls;
+  private jsonPoseEditor: JsonPoseEditor;
   
   // Debounced save function to prevent excessive saving
   private saveStateTimeout: number | null = null;
@@ -317,8 +319,12 @@ class StickFigureApp3D {
       }
     });
 
-    // JSON Pose Editor Modal
-    this.setupJsonPoseEditor();
+    // Initialize JSON Pose Editor
+    this.jsonPoseEditor = new JsonPoseEditor({
+      exportPoseAsJson: () => this.exportPoseAsJson(),
+      importPoseFromJson: (jsonData: any) => this.importPoseFromJson(jsonData),
+      showMessage: (message: string, type: 'success' | 'error' | 'info' | 'warning') => this.showMessage(message, type)
+    });
 
     
 
@@ -882,7 +888,7 @@ class StickFigureApp3D {
     this.undoRedoControls.updateUI();
   }
 
-  private showMessage(message: string, type: 'success' | 'error' | 'info' | 'warning'): void {
+  public showMessage(message: string, type: 'success' | 'error' | 'info' | 'warning'): void {
     console.log(`📢 ${type.toUpperCase()}: ${message}`);
     
     // Create or update message element
@@ -1664,98 +1670,6 @@ class StickFigureApp3D {
     }
   }
 
-  private setupJsonPoseEditor(): void {
-    const jsonPoseButton = document.getElementById('json-pose-editor');
-    const modal = document.getElementById('json-pose-modal');
-    const closeBtn = document.getElementById('close-json-modal');
-    const cancelBtn = document.getElementById('cancel-json-modal');
-    const exportCurrentBtn = document.getElementById('export-current-pose');
-    const importFromJsonBtn = document.getElementById('import-from-json');
-    const saveBtn = document.getElementById('save-json-pose');
-    const textarea = document.getElementById('json-pose-textarea') as HTMLTextAreaElement;
-
-    // Open modal
-    jsonPoseButton?.addEventListener('click', () => {
-      if (modal) {
-        modal.style.display = 'flex';
-        this.populateJsonTextarea();
-      }
-    });
-
-    // Close modal
-    const closeModal = () => {
-      if (modal) {
-        modal.style.display = 'none';
-      }
-    };
-
-    closeBtn?.addEventListener('click', closeModal);
-    cancelBtn?.addEventListener('click', closeModal);
-
-    // Close modal when clicking outside
-    modal?.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeModal();
-      }
-    });
-
-    // Export current pose
-    exportCurrentBtn?.addEventListener('click', () => {
-      this.populateJsonTextarea();
-    });
-
-    // Import from JSON
-    importFromJsonBtn?.addEventListener('click', () => {
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.accept = '.json';
-      fileInput.onchange = (e) => {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const jsonString = event.target?.result as string;
-            if (textarea) {
-              textarea.value = jsonString;
-            }
-          };
-          reader.readAsText(file);
-        }
-      };
-      fileInput.click();
-    });
-
-    // Save pose
-    saveBtn?.addEventListener('click', async () => {
-      if (textarea) {
-        try {
-          const jsonData = JSON.parse(textarea.value);
-          await this.importPoseFromJson(jsonData);
-          closeModal();
-          this.showMessage('Pose imported successfully!', 'success');
-        } catch (error) {
-          this.showMessage('Invalid JSON format', 'error');
-          console.error('JSON parse error:', error);
-        }
-      }
-    });
-
-    // Handle Escape key
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal?.style.display === 'flex') {
-        closeModal();
-      }
-    });
-  }
-
-  private populateJsonTextarea(): void {
-    const textarea = document.getElementById('json-pose-textarea') as HTMLTextAreaElement;
-    if (textarea) {
-      const poseData = this.exportPoseAsJson();
-      textarea.value = JSON.stringify(poseData, null, 2);
-    }
-  }
-
   private setupIKChains(): void {
     if (!this.character.isLoaded()) {
       this.showMessage('No model loaded', 'error');
@@ -1900,7 +1814,7 @@ class StickFigureApp3D {
     return raycaster.ray.origin.clone().add(raycaster.ray.direction.multiplyScalar(5));
   }
 
-  private exportPoseAsJson(): any {
+  public exportPoseAsJson(): any {
     const boneRotations = this.renderer.getBoneRotations();
     const modelSettings = this.character.getSettings();
     
@@ -1927,7 +1841,7 @@ class StickFigureApp3D {
     };
   }
 
-  private async importPoseFromJson(jsonData: any): Promise<void> {
+  public async importPoseFromJson(jsonData: any): Promise<void> {
     try {
       // Import model if different
       if (jsonData.modelPath && jsonData.modelPath !== this.character.modelPath) {
